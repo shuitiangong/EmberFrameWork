@@ -108,3 +108,11 @@ InitTestScene*.unity*
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
 EmberFrameWork/Library
+
+# Local Unity-MCP settings can contain a machine-specific token.
+EmberFrameWork/UserSettings/AI-Game-Developer-Config.json
+
+# The local MCP port depends on this checkout's path.
+/.codex/config.toml
+EmberFrameWork/.codex/config.toml
+EmberFrameWork/Temp
