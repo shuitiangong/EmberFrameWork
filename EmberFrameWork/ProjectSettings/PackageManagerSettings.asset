@@ -32,6 +32,7 @@ MonoBehaviour:
     m_Scopes:
     - com.cysharp.unitask
     - com.ivanmurzak
+    - com.tuyoogame.yooasset
     - extensions.unity
     m_IsDefault: 0
     m_Capabilities: 0

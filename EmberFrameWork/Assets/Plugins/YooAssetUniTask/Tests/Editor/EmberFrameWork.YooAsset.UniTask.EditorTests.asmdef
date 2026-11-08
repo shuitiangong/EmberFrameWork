@@ -1,0 +1,15 @@
+{
+  "name": "EmberFrameWork.YooAsset.UniTask.EditorTests",
+  "references": [
+    "EmberFrameWork.YooAsset.UniTask",
+    "UniTask",
+    "YooAsset"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "autoReferenced": false
+}

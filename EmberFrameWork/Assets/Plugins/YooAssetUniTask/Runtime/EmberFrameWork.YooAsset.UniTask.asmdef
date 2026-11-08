@@ -1,0 +1,8 @@
+{
+  "name": "EmberFrameWork.YooAsset.UniTask",
+  "references": [
+    "UniTask",
+    "YooAsset"
+  ],
+  "autoReferenced": true
+}
