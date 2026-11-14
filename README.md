@@ -47,7 +47,7 @@ ModuleSystem.Shutdown();
 
 更新时使用复用的快照列表，新注册模块从下一次更新开始执行；更新期间关闭系统会停止当前快照的后续执行。更新回调异常直接向调用方传播，当前轮询停止，注册信息保留。初始化和关闭期间禁止全局更新，初始化期间禁止全局关闭；关闭回调可以获取已有模块，但不能新增模块。
 
-当前模块管理为单线程纯 C# 实现，调用方负责每帧驱动及退出清理。关闭 Domain Reload 时也需要在每个会话结束时调用 `Shutdown()`。Unity 驱动组件和启动入口按待办清单分步接入。EditMode 测试程序集为 `EmberFrameWork.Editor`。
+当前模块管理为单线程纯 C# 实现。使用下文的 `GameEntry` 时，由入口统一负责每帧驱动及退出清理；独立使用模块系统时，由调用方负责。关闭 Domain Reload 时也需要在每个会话结束时调用 `Shutdown()`。EditMode 测试程序集为 `EmberFrameWork.Editor`。
 
 ## FSM 管理模块
 
@@ -72,7 +72,7 @@ FSM 的唯一标识为泛型持有者类型与名称，名称区分大小写，`
 
 更新按创建顺序执行；更新期间新建的 FSM 从下一次更新开始执行，已销毁的 FSM 跳过。通过实例销毁时校验实例身份，旧引用和外部独立实例不会误删同名的新 FSM。直接关闭的 FSM 在下一次查询或更新时从注册表移除。初始化失败不占用名称；更新异常向调用方传播并停止本轮更新，失败 FSM 由核心关闭后从注册表移除，其余 FSM 保留。
 
-模块关闭时阻止新增 FSM，并继续清理所有 FSM，最后汇总回调异常。FSM 初始化回调期间禁止关闭或轮询该模块。关闭后的旧模块引用不可重新创建 FSM；下一会话通过 `ModuleSystem.GetModule<IFsmModule>()` 获取新模块。`GameEntry` 启动入口继续按待办清单分步实施。
+模块关闭时阻止新增 FSM，并继续清理所有 FSM，最后汇总回调异常。FSM 初始化回调期间禁止关闭或轮询该模块。关闭后的旧模块引用不可重新创建 FSM；下一会话通过 `ModuleSystem.GetModule<IFsmModule>()` 获取新模块。
 
 ## 流程框架与配置
 
@@ -103,4 +103,24 @@ setting.StartProcedure();
 
 配置采用类型名称序列化，支持程序集限定名与 TEngine 风格的完整类型名。类型必须继承 `ProcedureBase`、非抽象、非开放泛型，并具有公开无参构造函数。`TryValidate(out error)` 仅验证配置，不构造实例；`Configure(names, entrance)` 支持程序化设置。反射创建的具体流程在启用代码裁剪的构建中应使用 `[UnityEngine.Scripting.Preserve]` 或对应的 `link.xml` 保留。
 
-`ProcedureSetting.StartProcedure()` 同步完成验证、实例化、初始化和入口进入；此版本省略 TEngine 原实现启动前的单次 `UniTask.Yield()`，调用方可直接捕获启动异常。需要帧间等待时由后续启动入口安排。当前资产尚未选择流程，启动会报告配置未完成；具体启动流程、`GameEntry`、每帧驱动及退出清理属于待办中的 STARTUP-04。
+`ProcedureSetting.StartProcedure()` 同步完成验证、实例化、初始化和入口进入；此版本省略 TEngine 原实现启动前的单次 `UniTask.Yield()`，调用方可直接捕获启动异常。当前资产包含 `ProcedureLaunch` 和 `ProcedureStartGame`，入口为 `ProcedureLaunch`；流程在首次更新时切换到 `ProcedureStartGame`。
+
+## 基础启动入口
+
+打开 `EmberFrameWork/Assets/Scenes/Launch.unity` 并进入 Play Mode。Console 依次输出 `ProcedureLaunch` 和 `ProcedureStartGame`，表示基础启动完成。该场景已设为构建列表首场景，当前仅包含启动入口及相机，游戏业务和后续场景尚未接入。
+
+| 内容 | Unity Assets 下的路径 |
+| --- | --- |
+| 启动组件 | `Scripts/GameEntry.cs` |
+| 具体启动流程 | `Scripts/Procedure/ProcedureLaunch.cs`、`ProcedureStartGame.cs` |
+| 流程配置 | `Scripts/FrameWork/Settings/ProcedureSetting.asset` |
+| 启动预制体 | `Scripts/FrameWork/Settings/Prefab/GameEntry.prefab` |
+| 启动场景 | `Scenes/Launch.unity` |
+
+`GameEntry` 和具体流程编译到 Unity 默认 `Assembly-CSharp`，框架继续保留 Runtime／Editor 两个程序集。入口组件位于 `EmberFrameWork.Game` 命名空间，具体流程沿用 `Procedure` 命名空间。
+
+`GameEntry` 必须挂载在场景根对象上并引用有效的流程配置，执行顺序为 `-10000`。入口先初始化 FSM 模块，再按配置初始化流程模块并进入启动流程。`ProcedureLaunch` 首次更新时切换到 `ProcedureStartGame`；当前流程不调用尚未迁移的资源更新、音频、语言或 HybridCLR 模块。
+
+初始化成功后入口通过 `DontDestroyOnLoad` 跨场景保留，`Update()` 每帧统一驱动模块。重复入口只销毁重复的 `GameEntry` 组件，避免重复初始化及重复轮询。禁用、销毁或退出应用时由持有入口关闭模块；重新启用后重新创建流程。启动或更新异常会记录错误、停止并清理框架，然后禁用入口，避免持续重复报错。
+
+每次进入 Play Mode 时通过 `SubsystemRegistration` 重置静态入口和遗留模块，关闭 Scene Reload 时另由 `AfterSceneLoad` 检查现存入口。验证已覆盖默认模式启动、重复入口、禁用恢复，以及关闭 Domain Reload 和 Scene Reload 后连续两次启动与退出清理。调用方可通过 `GameEntry.Instance.IsInitialized`、`CurrentProcedure` 和 `LastError` 查询状态。

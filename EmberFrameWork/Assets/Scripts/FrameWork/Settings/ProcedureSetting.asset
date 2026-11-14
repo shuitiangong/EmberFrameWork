@@ -12,5 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2c1824c7586f8524f9468dd2ee033410, type: 3}
   m_Name: ProcedureSetting
   m_EditorClassIdentifier: 
-  availableProcedureTypeNames: []
-  entranceProcedureTypeName: 
+  availableProcedureTypeNames:
+  - Procedure.ProcedureLaunch, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+    PublicKeyToken=null
+  - Procedure.ProcedureStartGame, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+    PublicKeyToken=null
+  entranceProcedureTypeName: Procedure.ProcedureLaunch, Assembly-CSharp, Version=0.0.0.0,
+    Culture=neutral, PublicKeyToken=null

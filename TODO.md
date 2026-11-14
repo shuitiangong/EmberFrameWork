@@ -14,8 +14,8 @@
 - [ ] **CORE-02：整理通用框架工具。** 评估并迁移 `GameFrameworkException`、`Utility.Text.Format`、`TypeNamePair`。按模块实际需要接入，统一异常与类型名称标识；当前 FSM 使用标准异常和字符串格式化。
 - [x] **STARTUP-02：迁移模块管理。** 已接入 `Module`、`IUpdateModule`、`ModuleSystem`，位于 `EmberFrameWork/Assets/Scripts/FrameWork/Runtime/Core`。支持接口获取、显式注册、按优先级更新、逆序关闭、重复注册防护和异常清理；由调用方显式驱动。当前使用标准 C# 工具，CORE-01、CORE-02 保留待办。验证：Unity 编译通过，14 项 EditMode 测试全部通过。本步骤按用户要求不包含 `FsmModule`。
 - [x] **FSM-02：接入 FSM 管理模块。** 已迁移 `IFsmModule`、`FsmModule`，位于 `FrameWork/Runtime/Module/FsmModule`，归入现有 Runtime 程序集。通过 `ModuleSystem` 创建、按持有者类型与名称管理 FSM，统一轮询和关闭，支持更新期间增删及异常清理。当前使用 `(Type, string)` 键和普通 FSM 实例，CORE-01、CORE-02 继续保留待办。验证：新增 12 项管理模块测试，连同既有测试共 39 项 EditMode 测试全部通过，Unity 编译通过。
-- [x] **STARTUP-03：迁移流程框架及配置。** 已接入 `ProcedureBase`、`IProcedureModule`、`ProcedureModule`、`ProcedureSetting` 和自定义 Inspector。运行时代码位于 `Runtime/Module/ProcedureModule`，编辑器位于 `Editor/Inspector`，配置资产位于 `FrameWork/Settings/ProcedureSetting.asset`。支持流程初始化、入口启动、FSM 切换、重启、配置校验与序列化。配置启动为同步调用；具体启动流程和入口将在 STARTUP-04 接入，当前资产尚未选择流程。验证：新增 13 项测试，现有共 52 项 EditMode 测试全部通过，Unity 编译通过。
-- [ ] **STARTUP-04：迁移启动入口。** 接入 `GameEntry` 和基础启动流程，验证初始化顺序、重复入口防护、退出清理及多次进入 Play Mode。依赖：STARTUP-03。
+- [x] **STARTUP-03：迁移流程框架及配置。** 已接入 `ProcedureBase`、`IProcedureModule`、`ProcedureModule`、`ProcedureSetting` 和自定义 Inspector。运行时代码位于 `Runtime/Module/ProcedureModule`，编辑器位于 `Editor/Inspector`，配置资产位于 `FrameWork/Settings/ProcedureSetting.asset`。支持流程初始化、入口启动、FSM 切换、重启、配置校验与序列化。配置启动为同步调用；资产已在 STARTUP-04 中绑定基础启动流程。验证：新增 13 项测试，现有共 52 项 EditMode 测试全部通过，Unity 编译通过。
+- [x] **STARTUP-04：迁移启动入口。** 已接入 `Scripts/GameEntry.cs` 和 `Scripts/Procedure` 下的 `ProcedureLaunch → ProcedureStartGame`。`Assets/Scenes/Launch.unity` 为构建首场景，绑定 `FrameWork/Settings/Prefab/GameEntry.prefab` 与流程配置。入口负责模块更新、跨场景持久化和退出清理，重复入口仅移除重复组件。验证：默认 Play Mode 启动、重复入口、禁用后重新启用、关闭 Domain Reload／Scene Reload 后连续两次启动及退出清理均通过；编辑器设置已恢复，52 项 EditMode 回归测试全部通过。当前停留在基础启动完成阶段，业务游戏逻辑另行接入。
 
 本轮范围为基础启动框架。YooAsset 更新下载、加载界面和 HybridCLR 热更新需要另行确定实施范围。
 
