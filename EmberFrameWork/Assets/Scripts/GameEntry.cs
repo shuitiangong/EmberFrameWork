@@ -29,6 +29,7 @@ namespace EmberFrameWork.Game
         private static void ResetSession()
         {
             // This also executes when Enter Play Mode has Domain Reload disabled.
+            Utility.Unity.Shutdown();
             try { ModuleSystem.Shutdown(); }
             catch (Exception exception) { Log.Exception(exception); }
             Instance = null;
@@ -70,6 +71,7 @@ namespace EmberFrameWork.Game
                 Instance = this;
                 _initializedSession = _session;
                 DontDestroyOnLoad(gameObject);
+                Utility.Unity.Initialize(gameObject);
                 ModuleSystem.GetModule<IFsmModule>();
                 procedureSetting.StartProcedure();
                 IsInitialized = Instance == this && isActiveAndEnabled;
@@ -114,6 +116,7 @@ namespace EmberFrameWork.Game
             IsInitialized = false;
             if (Instance != this || _initializedSession != _session || _stopping) return;
             _stopping = true;
+            Utility.Unity.Shutdown();
             try { ModuleSystem.Shutdown(); }
             catch (Exception exception) { Log.Exception(exception, this); }
             finally

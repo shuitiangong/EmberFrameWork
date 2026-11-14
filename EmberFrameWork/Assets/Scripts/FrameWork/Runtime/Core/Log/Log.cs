@@ -2758,7 +2758,7 @@ namespace EmberFrameWork
         {
             if (!condition)
             {
-                string message = string.Format("{0}\n{1}", "Assert Failed", System.Environment.StackTrace);
+                string message = Utility.Text.Format("{0}\n{1}", "Assert Failed", System.Environment.StackTrace);
                 Fatal(message);
             }
         }
@@ -2773,7 +2773,7 @@ namespace EmberFrameWork
         {
             if (!condition)
             {
-                string message = string.Format("{0}\n{1}", "Assert Failed" + retStr, System.Environment.StackTrace);
+                string message = Utility.Text.Format("{0}\n{1}", "Assert Failed" + retStr, System.Environment.StackTrace);
                 Fatal(message);
             }
         }
