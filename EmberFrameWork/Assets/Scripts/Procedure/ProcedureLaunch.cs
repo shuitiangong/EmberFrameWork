@@ -14,7 +14,7 @@ namespace Procedure
 
         protected override void OnEnter(IFsm<IProcedureModule> procedureOwner)
         {
-            Debug.Log("[Startup] ProcedureLaunch：基础模块初始化完成。");
+            Log.Info("[Startup] ProcedureLaunch：基础模块初始化完成。");
         }
 
         protected override void OnUpdate(IFsm<IProcedureModule> procedureOwner, float elapseSeconds, float realElapseSeconds)

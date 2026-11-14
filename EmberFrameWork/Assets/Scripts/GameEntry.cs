@@ -30,7 +30,7 @@ namespace EmberFrameWork.Game
         {
             // This also executes when Enter Play Mode has Domain Reload disabled.
             try { ModuleSystem.Shutdown(); }
-            catch (Exception exception) { Debug.LogException(exception); }
+            catch (Exception exception) { Log.Exception(exception); }
             Instance = null;
             _quitting = false;
             _session++;
@@ -97,7 +97,7 @@ namespace EmberFrameWork.Game
         {
             LastError = exception.ToString();
             StopFramework();
-            Debug.LogException(exception, this);
+            Log.Exception(exception, this);
         }
 
         private void OnDisable() => StopFramework();
@@ -115,7 +115,7 @@ namespace EmberFrameWork.Game
             if (Instance != this || _initializedSession != _session || _stopping) return;
             _stopping = true;
             try { ModuleSystem.Shutdown(); }
-            catch (Exception exception) { Debug.LogException(exception, this); }
+            catch (Exception exception) { Log.Exception(exception, this); }
             finally
             {
                 Instance = null;

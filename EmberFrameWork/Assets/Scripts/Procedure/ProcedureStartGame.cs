@@ -14,7 +14,7 @@ namespace Procedure
 
         protected override void OnEnter(IFsm<IProcedureModule> procedureOwner)
         {
-            Debug.Log("[Startup] ProcedureStartGame：启动完成，等待游戏逻辑接入。");
+            Log.Info("[Startup] ProcedureStartGame：启动完成，等待游戏逻辑接入。");
         }
     }
 }
