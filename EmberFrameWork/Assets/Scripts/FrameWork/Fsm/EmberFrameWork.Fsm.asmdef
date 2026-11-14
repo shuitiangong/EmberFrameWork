@@ -1,0 +1,7 @@
+{
+  "name": "EmberFrameWork.Fsm",
+  "rootNamespace": "EmberFrameWork",
+  "references": [],
+  "autoReferenced": true,
+  "noEngineReferences": true
+}

@@ -1,0 +1,7 @@
+{
+  "name": "EmberFrameWork.Fsm.EditorTests",
+  "references": ["EmberFrameWork.Fsm"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}
