@@ -1,0 +1,9 @@
+{
+  "name": "EmberFrameWork.Editor",
+  "rootNamespace": "EmberFrameWork.Editor",
+  "references": ["EmberFrameWork.Runtime"],
+  "includePlatforms": ["Editor"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": true
+}

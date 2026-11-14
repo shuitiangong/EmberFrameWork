@@ -1,7 +1,7 @@
 {
-  "name": "EmberFrameWork.Fsm",
+  "name": "EmberFrameWork.Runtime",
   "rootNamespace": "EmberFrameWork",
   "references": [],
   "autoReferenced": true,
-  "noEngineReferences": true
+  "noEngineReferences": false
 }
