@@ -1,7 +1,7 @@
 {
   "name": "EmberFrameWork.Editor",
   "rootNamespace": "EmberFrameWork.Editor",
-  "references": ["EmberFrameWork.Runtime"],
+  "references": ["EmberFrameWork.Runtime", "YooAsset", "UniTask"],
   "includePlatforms": ["Editor"],
   "overrideReferences": true,
   "precompiledReferences": ["nunit.framework.dll"],

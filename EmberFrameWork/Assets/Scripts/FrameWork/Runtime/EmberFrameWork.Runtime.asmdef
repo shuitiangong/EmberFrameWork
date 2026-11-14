@@ -1,7 +1,7 @@
 {
   "name": "EmberFrameWork.Runtime",
   "rootNamespace": "EmberFrameWork",
-  "references": [],
+  "references": ["YooAsset", "UniTask", "EmberFrameWork.YooAsset.UniTask"],
   "autoReferenced": true,
   "noEngineReferences": false
 }

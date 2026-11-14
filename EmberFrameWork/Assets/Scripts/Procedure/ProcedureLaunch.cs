@@ -19,7 +19,7 @@ namespace Procedure
 
         protected override void OnUpdate(IFsm<IProcedureModule> procedureOwner, float elapseSeconds, float realElapseSeconds)
         {
-            ChangeState<ProcedureStartGame>(procedureOwner);
+            ChangeState<ProcedureInitResources>(procedureOwner);
         }
     }
 }

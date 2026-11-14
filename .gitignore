@@ -12,6 +12,7 @@
 /EmberFrameWork/[Bb]uild/
 /EmberFrameWork/[Bb]uilds/
 /EmberFrameWork/[Ll]ogs/
+/EmberFrameWork/[Bb]undles/
 # /EmberFrameWork/[Uu]ser[Ss]ettings/
 *.log
 

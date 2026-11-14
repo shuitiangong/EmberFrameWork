@@ -13,6 +13,9 @@ namespace EmberFrameWork.Game
     {
         [SerializeField, Tooltip("启动流程配置，必须包含可用流程和入口流程。")]
         private ProcedureSetting procedureSetting;
+        [SerializeField, Tooltip("资源包配置；在启动流程开始前应用。")]
+        private ResourceSetting resourceSetting;
+        private IResourceModule _resourceModule;
 
         private static int _session;
         private static bool _quitting;
@@ -23,6 +26,11 @@ namespace EmberFrameWork.Game
         public static GameEntry Instance { get; private set; }
         public bool IsInitialized { get; private set; }
         public string LastError { get; private set; }
+        /// <summary>框架启动与资源就绪分开判断，初始化失败时框架仍继续更新以支持重试。</summary>
+        public bool IsGameReady => IsInitialized && _resourceModule != null && _resourceModule.IsReady && CurrentProcedure is Procedure.ProcedureStartGame;
+        public ResourceInitializationState ResourceState => _resourceModule?.InitializationState ?? ResourceInitializationState.NotStarted;
+        public string StartupError => LastError ?? (CurrentProcedure as Procedure.ProcedureInitResources)?.LastError;
+        public bool CanRetryResourceInitialization => CurrentProcedure is Procedure.ProcedureInitResources procedure && procedure.CanRetry;
         public ProcedureBase CurrentProcedure => IsInitialized ? procedureSetting.CurrentProcedure : null;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -67,6 +75,7 @@ namespace EmberFrameWork.Game
             {
                 if (transform.parent != null) throw new InvalidOperationException("GameEntry 必须挂在场景根对象上。");
                 if (procedureSetting == null) throw new InvalidOperationException("GameEntry 未指定 ProcedureSetting。");
+                if (resourceSetting == null) throw new InvalidOperationException("GameEntry 未指定 ResourceSetting。");
                 if (!procedureSetting.TryValidate(out var error)) throw new InvalidOperationException(error);
 
                 Instance = this;
@@ -75,6 +84,8 @@ namespace EmberFrameWork.Game
                 _initializedSession = _session;
                 DontDestroyOnLoad(gameObject);
                 Utility.Unity.Initialize(gameObject);
+                _resourceModule = ModuleSystem.GetModule<IResourceModule>();
+                _resourceModule.Configure(resourceSetting);
                 ModuleSystem.GetModule<IFsmModule>();
                 procedureSetting.StartProcedure();
                 IsInitialized = Instance == this && isActiveAndEnabled;
@@ -106,6 +117,13 @@ namespace EmberFrameWork.Game
         }
 
         private void OnDisable() => StopFramework();
+
+        [ContextMenu("重试资源初始化")]
+        public void RetryResourceInitialization()
+        {
+            if (CurrentProcedure is Procedure.ProcedureInitResources procedure && procedure.Retry()) return;
+            Log.Warning("[Startup] 当前没有可重试的资源初始化错误。");
+        }
         private void OnDestroy() => StopFramework();
         private void OnApplicationQuit()
         {
@@ -125,6 +143,7 @@ namespace EmberFrameWork.Game
             finally
             {
                 MemoryPool.ClearAll();
+                _resourceModule = null;
                 Instance = null;
                 _initializedSession = 0;
                 _stopping = false;

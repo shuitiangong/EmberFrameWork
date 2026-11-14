@@ -45,3 +45,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   procedureSetting: {fileID: 11400000, guid: d407a1658938bda4f83d23f9b15d9bd9, type: 2}
+  resourceSetting: {fileID: 11400000, guid: 5dda9c99dd5a4857a1db99dca174288c, type: 2}

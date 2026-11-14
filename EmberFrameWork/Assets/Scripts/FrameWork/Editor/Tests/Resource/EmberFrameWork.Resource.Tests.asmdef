@@ -1,0 +1,7 @@
+{
+  "name": "EmberFrameWork.Resource.Tests",
+  "references": ["EmberFrameWork.Runtime", "YooAsset", "UniTask"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}

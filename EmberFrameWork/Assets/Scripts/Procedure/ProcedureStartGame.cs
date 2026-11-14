@@ -14,6 +14,8 @@ namespace Procedure
 
         protected override void OnEnter(IFsm<IProcedureModule> procedureOwner)
         {
+            if (!ModuleSystem.GetModule<IResourceModule>().IsReady)
+                throw new System.InvalidOperationException("资源包尚未就绪，不能进入游戏流程。");
             Log.Info("[Startup] ProcedureStartGame：启动完成，等待游戏逻辑接入。");
         }
     }
