@@ -32,6 +32,7 @@ namespace EmberFrameWork.Game
             Utility.Unity.Shutdown();
             try { ModuleSystem.Shutdown(); }
             catch (Exception exception) { Log.Exception(exception); }
+            finally { MemoryPool.Reset(); }
             Instance = null;
             _quitting = false;
             _session++;
@@ -69,6 +70,8 @@ namespace EmberFrameWork.Game
                 if (!procedureSetting.TryValidate(out var error)) throw new InvalidOperationException(error);
 
                 Instance = this;
+                var memoryPoolSetting = GetComponent<MemoryPoolSetting>();
+                if (memoryPoolSetting != null) memoryPoolSetting.Apply();
                 _initializedSession = _session;
                 DontDestroyOnLoad(gameObject);
                 Utility.Unity.Initialize(gameObject);
@@ -121,6 +124,7 @@ namespace EmberFrameWork.Game
             catch (Exception exception) { Log.Exception(exception, this); }
             finally
             {
+                MemoryPool.ClearAll();
                 Instance = null;
                 _initializedSession = 0;
                 _stopping = false;
