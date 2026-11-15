@@ -31,6 +31,7 @@ namespace EmberFrameWork
             try
             {
                 InitializationState = ResourceInitializationState.InitializingPackage;
+                InitializeAssetPool();
                 await _backend.InitializeAsync(options, PlayMode, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 InitializationState = ResourceInitializationState.RequestingVersion;

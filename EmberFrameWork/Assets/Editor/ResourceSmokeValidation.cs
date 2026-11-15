@@ -46,7 +46,7 @@ namespace EmberFrameWork.Editor
             if (!CanRun()) throw new InvalidOperationException("请先运行 Launch 场景并等待游戏就绪，且不能并行执行验证。");
             var resource = ModuleSystem.GetModule<IResourceModule>();
             var pools = ModuleSystem.GetModule<IObjectPoolModule>();
-            ObjectPoolBase FindPool() => pools.GetAllObjectPools().SingleOrDefault(p => p.Name == "Resource Assets");
+            ObjectPoolBase FindPool() => pools.GetAllObjectPools().SingleOrDefault(p => p.Name == "Asset Pool");
             if (FindPool() is ObjectPoolBase occupied && occupied.Count != 0)
                 throw new InvalidOperationException("请在资源缓存为空时验证，避免干扰业务正在持有的资源。");
 

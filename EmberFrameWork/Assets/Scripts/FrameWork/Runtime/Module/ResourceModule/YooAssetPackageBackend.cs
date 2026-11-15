@@ -7,7 +7,7 @@ using YooAsset;
 namespace EmberFrameWork
 {
     /// <summary>当前默认包由框架独占管理 YooAsset 生命周期，不接管外部已经初始化的系统。</summary>
-    internal sealed class YooAssetPackageBackend : IResourcePackageBackend, IResourceAssetBackend
+    internal sealed class YooAssetPackageBackend : IResourcePackageBackend
     {
         private ResourcePackage _package;
         private bool _ownsSystem;
@@ -75,49 +75,6 @@ namespace EmberFrameWork
         {
             if (operation.Status != EOperationStatus.Succeeded)
                 throw new InvalidOperationException($"{stage}失败：{operation.Error}");
-        }
-
-        public IResourceAssetHandle Load(string location, Type type, bool synchronous)
-        {
-            if (_package == null || !_package.PackageValid) throw new InvalidOperationException("资源包尚未就绪。");
-            return new AssetLease(synchronous ? _package.LoadAssetSync(location, type) : _package.LoadAssetAsync(location, type));
-        }
-
-        public async UniTask UnloadUnusedAsync(CancellationToken token)
-        {
-            var operation = _package.UnloadUnusedAssetsAsync();
-            await operation.ToUniTask(cancellationToken: token);
-            Check(operation, "清理未使用资源");
-        }
-
-        private sealed class AssetLease : IResourceAssetHandle
-        {
-            private AssetHandle _handle;
-            public AssetLease(AssetHandle handle) { _handle = handle; }
-            public UnityEngine.Object Asset
-            {
-                get
-                {
-                    if (_handle == null || !_handle.IsValid) throw new ObjectDisposedException(nameof(AssetLease));
-                    if (_handle.Status != EOperationStatus.Succeeded)
-                        throw new InvalidOperationException($"资源加载失败：{_handle.Error}");
-                    var asset = _handle.AssetObject;
-                    if (asset == null) throw new InvalidOperationException("加载操作未返回有效资源。");
-                    return asset;
-                }
-            }
-            public UniTask WaitAsync(CancellationToken token)
-            {
-                if (_handle == null) throw new ObjectDisposedException(nameof(AssetLease));
-                // 轮询取消，资源句柄的访问和释放保持在 Unity 主线程。
-                return _handle.ToUniTask(cancellationToken: token);
-            }
-            public void Release()
-            {
-                var handle = _handle;
-                _handle = null;
-                if (handle != null && handle.IsValid) handle.Release();
-            }
         }
 
         public void Shutdown()

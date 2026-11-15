@@ -1,191 +1,207 @@
+// Selected from TEngine (Copyright (c) 2022 ALEXTANG, MIT). See ../../Core/LICENSE.txt.
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
-using Object = UnityEngine.Object;
+using YooAsset;
 
 namespace EmberFrameWork
 {
     internal sealed partial class ResourceModule
     {
-        private readonly Dictionary<AssetKey, CachedAsset> _assetCache = new Dictionary<AssetKey, CachedAsset>();
-        private readonly Dictionary<Object, CachedAsset> _assets = new Dictionary<Object, CachedAsset>(new AssetComparer());
-        private readonly HashSet<IResourceAssetHandle> _pendingAssets = new HashSet<IResourceAssetHandle>();
-        private IObjectPoolModule _poolManager;
-        private IObjectPool<CachedAsset> _assetPool;
-        private long _assetSequence;
+        private readonly HashSet<string> _assetLoadingList = new HashSet<string>();
+        private readonly TimeoutController _timeoutController = new TimeoutController();
 
-        public T LoadAsset<T>(string location) where T : Object
+        private AssetHandle GetHandleSync<T>(string location, string packageName = "") where T : UnityEngine.Object
         {
-            var key = ValidateLoad<T>(location);
-            if (TryBorrow(key, out T existing)) return existing;
-            var handle = AssetBackend.Load(location, typeof(T), true);
-            bool retained = false;
-            _pendingAssets.Add(handle);
-            try { return CacheOrBorrow<T>(key, handle, out retained); }
-            finally { _pendingAssets.Remove(handle); if (!retained) handle.Release(); }
+            return GetHandleSync(location, typeof(T), packageName);
         }
 
-        public async UniTask<T> LoadAssetAsync<T>(string location, CancellationToken cancellationToken = default) where T : Object
+        private AssetHandle GetHandleSync(string location, Type assetType, string packageName = "")
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var key = ValidateLoad<T>(location);
-            if (TryBorrow(key, out T existing)) return existing;
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
-            var handle = AssetBackend.Load(location, typeof(T), false);
-            bool retained = false;
-            _pendingAssets.Add(handle);
-            try
+            if (string.IsNullOrEmpty(packageName))
             {
-                await handle.WaitAsync(linked.Token);
-                linked.Token.ThrowIfCancellationRequested();
-                EnsureReady();
-                return CacheOrBorrow<T>(key, handle, out retained);
+                return YooAssets.GetPackage(DefaultPackageName).LoadAssetSync(location, assetType);
             }
-            finally { _pendingAssets.Remove(handle); if (!retained) handle.Release(); }
+
+            var package = YooAssets.GetPackage(packageName);
+            return package.LoadAssetSync(location, assetType);
         }
 
-        public void UnloadAsset(object asset)
+        private AssetHandle GetHandleAsync<T>(string location, string packageName = "") where T : UnityEngine.Object
         {
-            EnsureReady();
-            if (!(asset is Object unityAsset) || !_assets.TryGetValue(unityAsset, out var entry))
-                throw new ArgumentException("该资源不是由当前模块加载的有效缓存对象。", nameof(asset));
-            _assetPool.Unspawn(entry);
+            return GetHandleAsync(location, typeof(T), packageName);
         }
 
-        public async UniTask UnloadUnusedAssetsAsync()
+        private AssetHandle GetHandleAsync(string location, Type assetType, string packageName = "")
         {
-            EnsureReady();
-            _assetPool?.ReleaseAllUnused();
-            await AssetBackend.UnloadUnusedAsync(_lifetime.Token);
-        }
-
-        private IResourceAssetBackend AssetBackend => _backend as IResourceAssetBackend ?? throw new NotSupportedException("后端不支持资源加载。");
-
-        private void EnsureReady()
-        {
-            if (_shutdown) throw new ObjectDisposedException(nameof(ResourceModule));
-            if (!IsReady) throw new InvalidOperationException("请先等待 InitPackage 完成，再访问资源。");
-        }
-
-        private AssetKey ValidateLoad<T>(string location) where T : Object
-        {
-            EnsureReady();
-            if (string.IsNullOrWhiteSpace(location)) throw new ArgumentException("资源地址不能为空。", nameof(location));
-            if (typeof(Behaviour).IsAssignableFrom(typeof(T))) throw new ArgumentException("请加载 Prefab GameObject，再获取其 Behaviour 组件。");
-            return new AssetKey(location, typeof(T));
-        }
-
-        private bool TryBorrow<T>(AssetKey key, out T asset) where T : Object
-        {
-            if (_assetCache.TryGetValue(key, out var entry))
+            if (string.IsNullOrEmpty(packageName))
             {
-                var borrowed = _assetPool.Spawn(entry.Name);
-                asset = (T)borrowed.Target;
-                return true;
+                return YooAssets.GetPackage(DefaultPackageName).LoadAssetAsync(location, assetType);
             }
-            asset = null;
-            return false;
+
+            var package = YooAssets.GetPackage(packageName);
+            return package.LoadAssetAsync(location, assetType);
         }
 
-        private T CacheOrBorrow<T>(AssetKey key, IResourceAssetHandle handle, out bool retained) where T : Object
+        private string GetCacheKey(string location, string packageName = "")
         {
-            retained = false;
-            var loaded = handle.Asset;
-            if (!(loaded is T asset)) throw new InvalidOperationException($"资源 {key.Location} 不是所请求的 {typeof(T).Name} 类型。");
-            // 等待期间同一地址可能已经被另一个请求缓存，以先完成的缓存为准。
-            if (TryBorrow(key, out T winner)) return winner;
-            if (_assets.TryGetValue(asset, out var existing))
+            if (string.IsNullOrEmpty(packageName) || packageName.Equals(DefaultPackageName))
             {
-                AddAlias(existing, key);
-                _assetPool.Spawn(existing.Name);
-                return asset;
+                return location;
             }
-            EnsureAssetPool();
-            var entry = MemoryPool.Acquire<CachedAsset>();
-            entry.Setup(this, asset, handle, (++_assetSequence).ToString());
-            _assets.Add(asset, entry);
-            AddAlias(entry, key);
-            try { _assetPool.Register(entry, true); }
-            catch { Evict(entry); MemoryPool.Release(entry); throw; }
-            retained = true;
-            return asset;
+
+            return $"{packageName}/{location}";
         }
 
-        private void AddAlias(CachedAsset entry, AssetKey key)
+        public T LoadAsset<T>(string location, string packageName = "") where T : UnityEngine.Object
         {
-            if (_assetCache.ContainsKey(key)) return;
-            _assetCache.Add(key, entry);
-            entry.Keys.Add(key);
-        }
-
-        private void EnsureAssetPool()
-        {
-            if (_assetPool != null) return;
-            _poolManager = ModuleSystem.GetModule<IObjectPoolModule>();
-            var options = RequireOptions();
-            _assetPool = _poolManager.CreateMultiSpawnObjectPool<CachedAsset>("Resource Assets", options.AssetAutoReleaseInterval,
-                options.AssetCapacity, options.AssetExpireTime, options.AssetPriority);
-        }
-
-        private void Evict(CachedAsset entry)
-        {
-            foreach (var key in entry.Keys) _assetCache.Remove(key);
-            if (entry.Target is Object asset) _assets.Remove(asset);
-        }
-
-        private void ReleaseAssetCache()
-        {
-            List<Exception> errors = null;
-            // 关闭期间不再启动加载；快照允许请求 finally 同时从集合移除。
-            foreach (var handle in new List<IResourceAssetHandle>(_pendingAssets))
+            if (string.IsNullOrEmpty(location))
             {
-                try { handle.Release(); }
-                catch (Exception error) { if (errors == null) errors = new List<Exception>(); errors.Add(error); }
+                throw new GameFrameworkException("Asset name is invalid.");
             }
-            _pendingAssets.Clear();
-            try { if (_assetPool != null) _poolManager.DestroyObjectPool(_assetPool); }
-            catch (Exception error) { if (errors == null) errors = new List<Exception>(); errors.Add(error); }
-            finally { _assetPool = null; _poolManager = null; _assetCache.Clear(); _assets.Clear(); }
-            if (errors != null) throw new AggregateException(errors);
-        }
 
-        private readonly struct AssetKey : IEquatable<AssetKey>
-        {
-            public readonly string Location;
-            private readonly Type _type;
-            public AssetKey(string location, Type type) { Location = location; _type = type; }
-            public bool Equals(AssetKey other) => Location == other.Location && _type == other._type;
-            public override bool Equals(object obj) => obj is AssetKey other && Equals(other);
-            public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(Location) ^ _type.GetHashCode();
-        }
-
-        private sealed class AssetComparer : IEqualityComparer<Object>
-        {
-            public bool Equals(Object x, Object y) => ReferenceEquals(x, y);
-            public int GetHashCode(Object obj) => RuntimeHelpers.GetHashCode(obj);
-        }
-
-        private sealed class CachedAsset : ObjectBase
-        {
-            public readonly List<AssetKey> Keys = new List<AssetKey>();
-            private ResourceModule _owner;
-            private IResourceAssetHandle _handle;
-            public CachedAsset() { }
-            public void Setup(ResourceModule owner, Object asset, IResourceAssetHandle handle, string name)
+            string assetObjectKey = GetCacheKey(location, packageName);
+            AssetObject assetObject = _assetPool.Spawn(assetObjectKey);
+            if (assetObject != null)
             {
-                Initialize(name, asset); _owner = owner; _handle = handle;
+                return assetObject.Target as T;
             }
-            protected internal override void Release(bool isShutdown)
+
+            AssetHandle handle = GetHandleSync<T>(location, packageName: packageName);
+
+            T ret = handle.AssetObject as T;
+
+            assetObject = AssetObject.Create(assetObjectKey, handle.AssetObject, handle, this);
+            _assetPool.Register(assetObject, true);
+
+            return ret;
+        }
+
+        public GameObject LoadGameObject(string location, Transform parent = null, string packageName = "")
+        {
+            if (string.IsNullOrEmpty(location))
             {
-                _owner.Evict(this);
-                _handle.Release();
+                throw new GameFrameworkException("Asset name is invalid.");
             }
-            public override void Clear()
+
+            string assetObjectKey = GetCacheKey(location, packageName);
+            AssetObject assetObject = _assetPool.Spawn(assetObjectKey);
+            if (assetObject != null)
             {
-                base.Clear(); Keys.Clear(); _owner = null; _handle = null;
+                return AssetsReference.Instantiate(assetObject.Target as GameObject, parent, this).gameObject;
+            }
+
+            AssetHandle handle = GetHandleSync<GameObject>(location, packageName: packageName);
+
+            GameObject gameObject = AssetsReference.Instantiate(handle.AssetObject as GameObject, parent, this).gameObject;
+
+            assetObject = AssetObject.Create(assetObjectKey, handle.AssetObject, handle, this);
+            _assetPool.Register(assetObject, true);
+
+            return gameObject;
+        }
+
+        public async UniTask<T> LoadAssetAsync<T>(string location, CancellationToken cancellationToken = default, string packageName = "") where T : UnityEngine.Object
+        {
+            if (string.IsNullOrEmpty(location))
+            {
+                throw new GameFrameworkException("Asset name is invalid.");
+            }
+
+            string assetObjectKey = GetCacheKey(location, packageName);
+
+            await TryWaitingLoading(assetObjectKey);
+
+            AssetObject assetObject = _assetPool.Spawn(assetObjectKey);
+            if (assetObject != null)
+            {
+                await UniTask.Yield();
+                return assetObject.Target as T;
+            }
+
+            _assetLoadingList.Add(assetObjectKey);
+
+            AssetHandle handle = GetHandleAsync<T>(location, packageName: packageName);
+
+            bool cancelOrFailed = await handle.ToUniTask().AttachExternalCancellation(cancellationToken).SuppressCancellationThrow();
+
+            if (cancelOrFailed)
+            {
+                _assetLoadingList.Remove(assetObjectKey);
+                return null;
+            }
+
+            assetObject = AssetObject.Create(assetObjectKey, handle.AssetObject, handle, this);
+            _assetPool.Register(assetObject, true);
+
+            _assetLoadingList.Remove(assetObjectKey);
+
+            return handle.AssetObject as T;
+        }
+
+        public async UniTask<GameObject> LoadGameObjectAsync(string location, Transform parent = null, CancellationToken cancellationToken = default, string packageName = "")
+        {
+            if (string.IsNullOrEmpty(location))
+            {
+                throw new GameFrameworkException("Asset name is invalid.");
+            }
+
+            string assetObjectKey = GetCacheKey(location, packageName);
+
+            await TryWaitingLoading(assetObjectKey);
+
+            AssetObject assetObject = _assetPool.Spawn(assetObjectKey);
+            if (assetObject != null)
+            {
+                await UniTask.Yield();
+                return AssetsReference.Instantiate(assetObject.Target as GameObject, parent, this).gameObject;
+            }
+
+            _assetLoadingList.Add(assetObjectKey);
+
+            AssetHandle handle = GetHandleAsync<GameObject>(location, packageName: packageName);
+
+            bool cancelOrFailed = await handle.ToUniTask().AttachExternalCancellation(cancellationToken).SuppressCancellationThrow();
+
+            if (cancelOrFailed)
+            {
+                _assetLoadingList.Remove(assetObjectKey);
+                return null;
+            }
+
+            GameObject gameObject = AssetsReference.Instantiate(handle.AssetObject as GameObject, parent, this).gameObject;
+
+            assetObject = AssetObject.Create(assetObjectKey, handle.AssetObject, handle, this);
+            _assetPool.Register(assetObject, true);
+
+            _assetLoadingList.Remove(assetObjectKey);
+
+            return gameObject;
+        }
+
+        private async UniTask TryWaitingLoading(string assetObjectKey)
+        {
+            if (_assetLoadingList.Contains(assetObjectKey))
+            {
+                try
+                {
+                    await UniTask.WaitUntil(() => !_assetLoadingList.Contains(assetObjectKey))
+#if UNITY_EDITOR
+                        .AttachExternalCancellation(_timeoutController.Timeout(TimeSpan.FromSeconds(60)));
+                    _timeoutController.Reset();
+#else
+                    ;
+#endif
+                }
+                catch (OperationCanceledException ex)
+                {
+                    if (_timeoutController.IsTimeout())
+                    {
+                        Log.Error($"LoadAssetAsync Waiting {assetObjectKey} timeout. reason:{ex.Message}");
+                    }
+                }
             }
         }
     }

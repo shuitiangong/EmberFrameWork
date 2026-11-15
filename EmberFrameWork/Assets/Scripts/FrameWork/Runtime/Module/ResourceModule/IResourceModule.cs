@@ -20,10 +20,18 @@ namespace EmberFrameWork
         string LastError { get; }
         /// <summary>初始化默认包、获取版本并加载清单。重复调用共享任务；失败后可重试。</summary>
         UniTask<string> InitPackage();
-        /// <summary>加载默认包中的资源。每次成功调用都需要对应一次 UnloadAsset。</summary>
-        T LoadAsset<T>(string location) where T : UnityEngine.Object;
-        /// <summary>取消仅影响当前请求；失败或取消不会留下本次请求的句柄。</summary>
-        UniTask<T> LoadAssetAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object;
+        /// <summary>加载资源；每次成功调用都需要对应一次 UnloadAsset。指定包须已初始化。</summary>
+        T LoadAsset<T>(string location, string packageName = "") where T : UnityEngine.Object;
+        /// <summary>保留 TEngine 原等待和取消语义；加载等待取消时返回 null，缓存命中后 Yield。</summary>
+        UniTask<T> LoadAssetAsync<T>(string location, CancellationToken cancellationToken = default, string packageName = "") where T : UnityEngine.Object;
+        /// <summary>加载 Prefab 并实例化；实例的 AssetsReference 在 OnDestroy 中归还资源。</summary>
+        UnityEngine.GameObject LoadGameObject(string location, UnityEngine.Transform parent = null, string packageName = "");
+        UniTask<UnityEngine.GameObject> LoadGameObjectAsync(string location, UnityEngine.Transform parent = null,
+            CancellationToken cancellationToken = default, string packageName = "");
+        float AssetAutoReleaseInterval { get; set; }
+        int AssetCapacity { get; set; }
+        float AssetExpireTime { get; set; }
+        int AssetPriority { get; set; }
         /// <summary>归还一次资源借用；引用归零后仍可缓存，直到过期或主动清理。</summary>
         void UnloadAsset(object asset);
         /// <summary>释放所有空闲缓存，再等待 YooAsset 清理未使用资源。</summary>

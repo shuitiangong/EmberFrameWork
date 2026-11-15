@@ -1,212 +1,75 @@
-using System.Collections;
-using UnityEngine.TestTools;
 using System;
-using System.Collections.Generic;
-using System.Runtime.Serialization;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
-using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using YooAsset;
-using Object = UnityEngine.Object;
 
 namespace EmberFrameWork.Tests
 {
+    // 原 Backend/Lease 缓存已移除，不再断言额外的别名合并、提前取消抛异常等行为。
     public class ResourceLoadingTests
     {
-        // 不调用 Unity 原生构造函数；只验证模块的身份、类型及句柄所有权逻辑。
-        private static T Identity<T>() where T : Object => (T)FormatterServices.GetUninitializedObject(typeof(T));
-        private sealed class Handle : IResourceAssetHandle
+        private sealed class InitializationBackend : IResourcePackageBackend
         {
-            public Object Value;
-            public bool Fail;
-            public int Releases;
-            public TaskCompletionSource<bool> Gate;
-            public readonly List<string> Events;
-            public Handle(List<string> events) { Events = events; }
-            public Object Asset => Fail ? throw new InvalidOperationException("load failed") : Value;
-            public UniTask WaitAsync(CancellationToken token) => Gate == null ? UniTask.CompletedTask : Gate.Task.AsUniTask(false).AsUniTask().AttachExternalCancellation(token);
-            public void Release() { if (Releases != 0) return; Releases++; Events.Add("release"); }
-        }
-        private sealed class Backend : IResourcePackageBackend, IResourceAssetBackend
-        {
-            public readonly List<string> Events = new List<string>();
-            public readonly List<Handle> Handles = new List<Handle>();
-            public Object Value = Identity<UnityEngine.TextAsset>();
-            public bool Fail, Wait;
             public UniTask InitializeAsync(ResourceOptions options, EPlayMode mode, CancellationToken token) => UniTask.CompletedTask;
-            public UniTask<string> RequestVersionAsync(CancellationToken token) => UniTask.FromResult("v1");
+            public UniTask<string> RequestVersionAsync(CancellationToken token) => UniTask.FromResult("test");
             public UniTask LoadManifestAsync(string version, CancellationToken token) => UniTask.CompletedTask;
-            public IResourceAssetHandle Load(string location, Type type, bool synchronous)
-            {
-                var handle = new Handle(Events) { Value = Value, Fail = Fail,
-                    Gate = Wait && !synchronous ? new TaskCompletionSource<bool>() : null };
-                Handles.Add(handle); return handle;
-            }
-            public UniTask UnloadUnusedAsync(CancellationToken token) { Events.Add("unload"); return UniTask.CompletedTask; }
-            public void Shutdown() => Events.Add("shutdown");
+            public void Shutdown() { }
         }
-        private Backend _backend;
         private ResourceModule _module;
-        private bool _strict;
         [SetUp] public void SetUp()
         {
-            ModuleSystem.Shutdown(); MemoryPool.ClearAll();
-            _strict = MemoryPool.EnableStrictCheck; MemoryPool.EnableStrictCheck = true;
             GameFrameworkLog.SetLogHelper(null);
-            _backend = new Backend(); _module = new ResourceModule(_backend); _module.Configure(new ResourceOptions());
+            ModuleSystem.Shutdown();
+            _module = new ResourceModule(new InitializationBackend());
+            _module.Configure(new ResourceOptions());
         }
         [TearDown] public void TearDown()
         {
-            try { _module.Shutdown(); ModuleSystem.Shutdown(); }
-            finally { MemoryPool.ClearAll(); MemoryPool.EnableStrictCheck = _strict; GameFrameworkLog.SetLogHelper(new DefaultLogHelper()); }
-        }
-
-        [UnityTest] public IEnumerator CacheHitSharesHandleAndWaitsForLastReturn() => ResourceTestTask.Wait(CacheHitSharesHandleAndWaitsForLastReturnAsync());
-        private async Task CacheHitSharesHandleAndWaitsForLastReturnAsync()
-        {
-            await _module.InitPackage();
-            var first = _module.LoadAsset<UnityEngine.TextAsset>("config");
-            Assert.AreSame(first, await _module.LoadAssetAsync<UnityEngine.TextAsset>("config"));
-            Assert.AreEqual(1, _backend.Handles.Count);
-            _module.UnloadAsset(first); await _module.UnloadUnusedAssetsAsync();
-            Assert.AreEqual(0, _backend.Handles[0].Releases);
-            _module.UnloadAsset(first); await _module.UnloadUnusedAssetsAsync();
-            Assert.AreEqual(1, _backend.Handles[0].Releases);
-            _module.LoadAsset<UnityEngine.TextAsset>("config");
-            Assert.AreEqual(2, _backend.Handles.Count);
-        }
-
-        [UnityTest] public IEnumerator ConcurrentLoadsMergeCacheAndReleaseDuplicateHandle() => ResourceTestTask.Wait(ConcurrentLoadsMergeCacheAndReleaseDuplicateHandleAsync());
-        private async Task ConcurrentLoadsMergeCacheAndReleaseDuplicateHandleAsync()
-        {
-            await _module.InitPackage(); _backend.Wait = true;
-            var first = _module.LoadAssetAsync<UnityEngine.TextAsset>("config").AsTask();
-            var second = _module.LoadAssetAsync<UnityEngine.TextAsset>("config").AsTask();
-            _backend.Handles[0].Gate.SetResult(true); await first;
-            _backend.Handles[1].Gate.SetResult(true); await second;
-            Assert.AreEqual(0, _backend.Handles[0].Releases);
-            Assert.AreEqual(1, _backend.Handles[1].Releases);
-            _module.UnloadAsset(first.Result); _module.UnloadAsset(second.Result);
-            await _module.UnloadUnusedAssetsAsync();
-            Assert.AreEqual(1, _backend.Handles[0].Releases);
-        }
-
-        [UnityTest] public IEnumerator AliasAndTypeQueriesShareOneCachedAsset() => ResourceTestTask.Wait(AliasAndTypeQueriesShareOneCachedAssetAsync());
-        private async Task AliasAndTypeQueriesShareOneCachedAssetAsync()
-        {
-            await _module.InitPackage();
-            var asset = _module.LoadAsset<UnityEngine.TextAsset>("short-name");
-            Assert.AreSame(asset, _module.LoadAsset<Object>("Assets/FullPath.txt"));
-            Assert.AreSame(asset, _module.LoadAsset<Object>("Assets/FullPath.txt"));
-            Assert.AreEqual(2, _backend.Handles.Count);
-            Assert.AreEqual(1, _backend.Handles[1].Releases);
-            for (int i = 0; i < 3; i++) _module.UnloadAsset(asset);
-            await _module.UnloadUnusedAssetsAsync();
-            _module.LoadAsset<Object>("Assets/FullPath.txt");
-            Assert.AreEqual(3, _backend.Handles.Count);
-        }
-
-        [UnityTest] public IEnumerator CancelOneWaiterDoesNotCancelOtherRequest() => ResourceTestTask.Wait(CancelOneWaiterDoesNotCancelOtherRequestAsync());
-        private async Task CancelOneWaiterDoesNotCancelOtherRequestAsync()
-        {
-            await _module.InitPackage(); _backend.Wait = true;
-            using var cancellation = new CancellationTokenSource();
-            var first = _module.LoadAssetAsync<UnityEngine.TextAsset>("config", cancellation.Token).AsTask();
-            var second = _module.LoadAssetAsync<UnityEngine.TextAsset>("config").AsTask();
-            cancellation.Cancel();
-            try { await first; Assert.Fail("Expected cancellation"); } catch (OperationCanceledException) { }
-            Assert.AreEqual(1, _backend.Handles[0].Releases);
-            Assert.AreEqual(0, _backend.Handles[1].Releases);
-            _backend.Handles[1].Gate.SetResult(true);
-            Assert.AreSame(_backend.Value, await second);
-        }
-
-        [UnityTest] public IEnumerator FailureAndWrongTypeReleaseHandlesAndAllowRetry() => ResourceTestTask.Wait(FailureAndWrongTypeReleaseHandlesAndAllowRetryAsync());
-        private async Task FailureAndWrongTypeReleaseHandlesAndAllowRetryAsync()
-        {
-            await _module.InitPackage(); _backend.Fail = true;
-            Assert.Throws<InvalidOperationException>(() => _module.LoadAsset<UnityEngine.TextAsset>("bad"));
-            try { await _module.LoadAssetAsync<UnityEngine.TextAsset>("bad"); Assert.Fail("Expected failure"); } catch (InvalidOperationException) { }
-            _backend.Fail = false;
-            Assert.Throws<InvalidOperationException>(() => _module.LoadAsset<UnityEngine.Texture2D>("bad"));
-            foreach (var handle in _backend.Handles) Assert.AreEqual(1, handle.Releases);
-            Assert.AreSame(_backend.Value, _module.LoadAsset<UnityEngine.TextAsset>("bad"));
-        }
-
-        [UnityTest] public IEnumerator PreCancelledAndInvalidCallsDoNotStartLoads() => ResourceTestTask.Wait(PreCancelledAndInvalidCallsDoNotStartLoadsAsync());
-        private async Task PreCancelledAndInvalidCallsDoNotStartLoadsAsync()
-        {
-            Assert.Throws<InvalidOperationException>(() => _module.LoadAsset<Object>("a"));
-            await _module.InitPackage();
-            Assert.Throws<ArgumentException>(() => _module.LoadAsset<Object>(" "));
-            Assert.Throws<ArgumentException>(() => _module.LoadAsset<UnityEngine.MonoBehaviour>("prefab"));
-            using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
-            try { await _module.LoadAssetAsync<Object>("a", cancellation.Token); Assert.Fail("Expected cancellation"); } catch (OperationCanceledException) { }
-            Assert.IsEmpty(_backend.Handles);
-        }
-
-        [UnityTest] public IEnumerator DoubleReturnPreservesUnderlyingPoolCounterBehavior() => ResourceTestTask.Wait(DoubleReturnPreservesUnderlyingPoolCounterBehaviorAsync());
-        private async Task DoubleReturnPreservesUnderlyingPoolCounterBehaviorAsync()
-        {
-            await _module.InitPackage(); var asset = _module.LoadAsset<Object>("a");
-            _module.UnloadAsset(asset);
-            Assert.Throws<GameFrameworkException>(() => _module.UnloadAsset(asset));
-            Assert.AreSame(asset, _module.LoadAsset<Object>("a"));
-            await _module.UnloadUnusedAssetsAsync();
-            // 原版 Unspawn 在计数减为 -1 后才抛错；再次 Spawn 后计数为 0。
-            Assert.AreEqual(1, _backend.Handles[0].Releases);
-        }
-
-        [UnityTest] public IEnumerator ShutdownReleasesCachedAndPendingHandlesBeforeBackend() => ResourceTestTask.Wait(ShutdownReleasesCachedAndPendingHandlesBeforeBackendAsync());
-        private async Task ShutdownReleasesCachedAndPendingHandlesBeforeBackendAsync()
-        {
-            await _module.InitPackage(); _module.LoadAsset<Object>("cached"); _backend.Wait = true;
-            var pending = _module.LoadAssetAsync<Object>("pending").AsTask();
             _module.Shutdown();
-            try { await pending; Assert.Fail("Expected cancellation"); } catch (OperationCanceledException) { }
-            foreach (var handle in _backend.Handles) Assert.AreEqual(1, handle.Releases);
-            Assert.AreEqual("shutdown", _backend.Events[_backend.Events.Count - 1]);
-            Assert.AreEqual(0, ModuleSystem.GetModule<IObjectPoolModule>().Count);
+            ModuleSystem.Shutdown();
+            GameFrameworkLog.SetLogHelper(new DefaultLogHelper());
         }
 
-        [UnityTest] public IEnumerator PoolExpiryEvictsModuleLookupAsWellAsHandle() => ResourceTestTask.Wait(PoolExpiryEvictsModuleLookupAsWellAsHandleAsync());
-        private async Task PoolExpiryEvictsModuleLookupAsWellAsHandleAsync()
+        [Test] public void CacheKeyUsesOriginalDefaultAndNamedPackageRules()
         {
-            _module.Shutdown(); _backend = new Backend(); _module = new ResourceModule(_backend);
-            _module.Configure(new ResourceOptions { AssetAutoReleaseInterval = 0, AssetExpireTime = 0 });
-            await _module.InitPackage();
-            var asset = _module.LoadAsset<Object>("expiring"); _module.UnloadAsset(asset);
-            ModuleSystem.Update(0, 0);
-            Assert.AreEqual(1, _backend.Handles[0].Releases);
-            _module.LoadAsset<Object>("expiring");
-            Assert.AreEqual(2, _backend.Handles.Count);
+            var method = typeof(ResourceModule).GetMethod("GetCacheKey", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.AreEqual("panel", method.Invoke(_module, new object[] { "panel", "" }));
+            Assert.AreEqual("panel", method.Invoke(_module, new object[] { "panel", "DefaultPackage" }));
+            Assert.AreEqual("Dlc/panel", method.Invoke(_module, new object[] { "panel", "Dlc" }));
         }
 
-        [UnityTest] public IEnumerator ZeroCapacityReleasesOnLastReturn() => ResourceTestTask.Wait(ZeroCapacityReleasesOnLastReturnAsync());
-        private async Task ZeroCapacityReleasesOnLastReturnAsync()
+        [Test] public void OriginalPoolPropertiesDelegateToMultiSpawnAssetPool()
         {
-            _module.Shutdown(); _backend = new Backend(); _module = new ResourceModule(_backend);
-            _module.Configure(new ResourceOptions { AssetCapacity = 0 });
-            await _module.InitPackage();
-            var asset = _module.LoadAsset<Object>("a");
-            Assert.AreEqual(0, _backend.Handles[0].Releases);
-            _module.UnloadAsset(asset);
-            Assert.AreEqual(1, _backend.Handles[0].Releases);
+            var pools = ModuleSystem.GetModule<IObjectPoolModule>();
+            _module.SetObjectPoolModule(pools);
+            _module.AssetCapacity = 20;
+            _module.AssetAutoReleaseInterval = 15f;
+            _module.AssetExpireTime = 30f;
+            _module.AssetPriority = 3;
+            var pool = pools.GetAllObjectPools().Single();
+            Assert.AreEqual("Asset Pool", pool.Name);
+            Assert.IsTrue(pool.AllowMultiSpawn);
+            Assert.AreEqual(20, pool.Capacity);
+            Assert.AreEqual(15f, pool.AutoReleaseInterval);
+            Assert.AreEqual(30f, pool.ExpireTime);
+            Assert.AreEqual(3, pool.Priority);
         }
 
-        [UnityTest] public IEnumerator LateCompletionUsesExistingLocationCache() => ResourceTestTask.Wait(LateCompletionUsesExistingLocationCacheAsync());
-        private async Task LateCompletionUsesExistingLocationCacheAsync()
+        [Test] public void EmptyLocationsKeepOriginalFrameworkException()
         {
-            await _module.InitPackage(); _backend.Wait = true;
-            var first = _module.LoadAssetAsync<Object>("a").AsTask();
-            _backend.Value = Identity<UnityEngine.TextAsset>();
-            var second = _module.LoadAssetAsync<Object>("a").AsTask();
-            _backend.Handles[0].Gate.SetResult(true); var result = await first;
-            _backend.Handles[1].Gate.SetResult(true);
-            Assert.AreSame(result, await second);
-            Assert.AreSame(result, _module.LoadAsset<Object>("a"));
-            Assert.AreEqual(1, _backend.Handles[1].Releases);
+            Assert.Throws<GameFrameworkException>(() => _module.LoadAsset<UnityEngine.Object>(""));
+            Assert.Throws<GameFrameworkException>(() => _module.LoadGameObject(null));
+            Assert.Throws<GameFrameworkException>(() => _module.LoadAssetAsync<UnityEngine.Object>(null).GetAwaiter().GetResult());
+            Assert.Throws<GameFrameworkException>(() => _module.LoadGameObjectAsync("").GetAwaiter().GetResult());
+        }
+
+        [Test] public void UnloadBeforePoolSetupIsOriginalNoOp()
+        {
+            Assert.DoesNotThrow(() => _module.UnloadAsset(new object()));
+            Assert.Throws<GameFrameworkException>(() => _module.SetObjectPoolModule(null));
         }
     }
 }
