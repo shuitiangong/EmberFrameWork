@@ -20,6 +20,9 @@ namespace EmberFrameWork
         /// <summary>获取音频模块。</summary>
         public static IAudioModule Audio => Get<IAudioModule>();
 
+        /// <summary>获取资源模块。</summary>
+        public static IResourceModule Resource => Get<IResourceModule>();
+
         private static T Get<T>() where T : class
         {
             T module = ModuleSystem.GetModule<T>();
