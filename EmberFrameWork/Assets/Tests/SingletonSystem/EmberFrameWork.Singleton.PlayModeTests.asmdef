@@ -1,0 +1,6 @@
+{
+  "name": "EmberFrameWork.Singleton.PlayModeTests",
+  "references": ["EmberFrameWork.Runtime"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}
