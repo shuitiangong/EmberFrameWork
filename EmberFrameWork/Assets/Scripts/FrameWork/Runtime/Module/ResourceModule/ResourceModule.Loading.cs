@@ -66,14 +66,29 @@ namespace EmberFrameWork
             AssetObject assetObject = _assetPool.Spawn(assetObjectKey);
             if (assetObject != null)
             {
-                return assetObject.Target as T;
+                if (assetObject.Target is T cachedAsset && cachedAsset != null)
+                    return cachedAsset;
+
+                _assetPool.Unspawn(assetObject.Target);
+                return null;
             }
 
-            AssetHandle handle = GetHandleSync<T>(location, packageName: packageName);
+            var package = YooAssets.GetPackage(string.IsNullOrEmpty(packageName) ? DefaultPackageName : packageName);
+            var assetInfo = package.GetAssetInfo(location, typeof(T));
+            if (!assetInfo.IsValid)
+                throw new GameFrameworkException($"加载资源 '{location}' 失败：{assetInfo.Error}");
 
+            AssetHandle handle = package.LoadAssetSync(assetInfo);
             T ret = handle.AssetObject as T;
+            if (ret == null)
+            {
+                var error = handle.Error;
+                if (handle.IsValid)
+                    handle.Release();
+                throw new GameFrameworkException($"加载资源 '{location}' 失败：{error}");
+            }
 
-            assetObject = AssetObject.Create(assetObjectKey, handle.AssetObject, handle, this);
+            assetObject = AssetObject.Create(assetObjectKey, ret, handle, this);
             _assetPool.Register(assetObject, true);
 
             return ret;

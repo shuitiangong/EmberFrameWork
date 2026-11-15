@@ -17,6 +17,9 @@ namespace EmberFrameWork
         /// <summary>获取主场景加载模块。</summary>
         public static ISceneModule Scene => Get<ISceneModule>();
 
+        /// <summary>获取音频模块。</summary>
+        public static IAudioModule Audio => Get<IAudioModule>();
+
         private static T Get<T>() where T : class
         {
             T module = ModuleSystem.GetModule<T>();
