@@ -122,8 +122,12 @@ namespace EmberFrameWork
 
         private void StopPlayback()
         {
-            _source.Stop();
-            _source.clip = null;
+            if (_source != null)
+            {
+                _source.Stop();
+                _source.clip = null;
+            }
+
             _state = PlaybackState.End;
             _resources.UnloadAsset(_clip);
             _clip = null;

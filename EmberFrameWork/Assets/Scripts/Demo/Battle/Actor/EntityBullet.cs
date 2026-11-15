@@ -1,0 +1,53 @@
+// Adapted from TEngine (Copyright (c) 2022 ALEXTANG, MIT). See ../../../FrameWork/Runtime/Core/LICENSE.txt.
+using GameLogic;
+using EmberFrameWork;
+using UnityEngine;
+
+public class EntityBullet : MonoBehaviour
+{
+	public float MoveSpeed = 20f;
+	public float DelayDestroyTime = 5f;
+
+	private Rigidbody _rigidbody;
+
+	public void InitEntity()
+	{
+		_rigidbody.velocity = this.transform.forward * MoveSpeed;
+	}
+
+	void Awake()
+	{
+		_rigidbody = this.transform.GetComponent<Rigidbody>();
+	}
+	void OnTriggerEnter(Collider other)
+	{
+		var name = other.gameObject.name;
+		if (name.StartsWith("Boundary"))
+			return;
+
+		var goName = this.gameObject.name;
+		if (goName.StartsWith("enemy_bullet"))
+		{
+			if (name.StartsWith("enemy") == false)
+			{
+				PoolManager.Instance.PushGameObject(this.gameObject);
+			}
+		}
+
+		if (goName.StartsWith("player_bullet"))
+		{
+			if (name.StartsWith("player") == false)
+			{
+				PoolManager.Instance.PushGameObject(this.gameObject);
+			}
+		}
+	}
+	void OnTriggerExit(Collider other)
+	{
+		var name = other.gameObject.name;
+		if (name.StartsWith("Boundary"))
+		{
+			PoolManager.Instance.PushGameObject(this.gameObject);
+		}
+	}
+}
