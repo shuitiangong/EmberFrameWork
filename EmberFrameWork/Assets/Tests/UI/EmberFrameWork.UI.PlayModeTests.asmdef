@@ -1,0 +1,6 @@
+{
+  "name": "EmberFrameWork.UI.PlayModeTests",
+  "references": ["EmberFrameWork.Runtime", "UnityEngine.UI", "UniTask"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}

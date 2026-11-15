@@ -9,6 +9,11 @@ namespace EmberFrameWork
 
         private static ITimerModule _timer;
 
+        /// <summary>获取 UI 模块，保留 TEngine 原单例入口。</summary>
+        public static UIModule UI => _ui ??= UIModule.Instance;
+
+        private static UIModule _ui;
+
         private static T Get<T>() where T : class
         {
             T module = ModuleSystem.GetModule<T>();
@@ -24,6 +29,7 @@ namespace EmberFrameWork
             Log.Info("GameModule Shutdown");
 
             _timer = null;
+            _ui = null;
         }
     }
 }

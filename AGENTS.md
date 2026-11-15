@@ -1,0 +1,6 @@
+# Unity Editor access
+
+- The Unity project is `EmberFrameWork/` beneath the repository root. CLI commands that target the project must use that directory as their working directory or pass it with `--path`.
+- When the `ai-game-developer` MCP tools are available, prefer calling them directly for supported Editor operations. Do not download or install `unity-mcp-cli` merely to reach those tools. Respect the configured approvals for individual tools.
+- If a CLI-only operation is needed, an existing local copy may be available at `.utmp/unity-mcp-cli/node_modules/unity-mcp-cli/bin/unity-mcp-cli.js` relative to the repository root. Invoke it with `node`; this is an ignored local cache and may have been cleared. Check for it before trying `npm`, `npx`, or a download. Do not use the CLI to bypass MCP tool approvals.
+- The shell sandbox may have a separate npm cache and may be unable to see the running Editor or connect to `localhost`. An empty sandbox cache or a failed sandbox probe does not establish that the CLI is missing from the machine or that Unity is stopped. Follow the applicable sandbox approval rules when network access is required. When intending to use an already-open Editor, use `--no-start` for CLI `run-tool` calls to avoid starting another Editor.
