@@ -1,0 +1,6 @@
+{
+  "name": "EmberFrameWork.UpdateDriver.PlayModeTests",
+  "references": ["EmberFrameWork.Runtime"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}

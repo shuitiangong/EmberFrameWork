@@ -12,6 +12,7 @@ namespace EmberFrameWork.Game
 
         private void Awake()
         {
+            ModuleSystem.GetModule<IUpdateDriver>();
             var resource = ModuleSystem.GetModule<IResourceModule>();
             resource.Configure(resourceSetting);
             // 原版 IDebuggerModule 尚未迁移，本步不引入调试模块。
