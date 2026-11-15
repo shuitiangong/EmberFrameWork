@@ -134,6 +134,80 @@ namespace EmberFrameWork.Tests
         private interface IWrapper { }
         private sealed class Wrapper : IWrapper { }
 
+        [Test] public void ManagersKeepListenersAndResetIsolated()
+        {
+            var first = new EventMgr();
+            var second = new EventMgr();
+            int firstCalls = 0, secondCalls = 0;
+            Action firstListener = () => firstCalls++;
+            Action secondListener = () => secondCalls++;
+            first.Dispatcher.AddEventListener(801, firstListener);
+            second.Dispatcher.AddEventListener(801, secondListener);
+            Assert.IsFalse(second.Dispatcher.HasEventListener(801, firstListener));
+            first.Dispatcher.Send(801);
+            Assert.AreEqual(1, firstCalls);
+            Assert.AreEqual(0, secondCalls);
+
+            first.Init();
+            Assert.IsFalse(first.Dispatcher.HasEventListener(801, firstListener));
+            Assert.IsTrue(second.Dispatcher.HasEventListener(801, secondListener));
+            second.Dispatcher.Send(801);
+            Assert.AreEqual(1, secondCalls);
+        }
+
+        [Test] public void ListenerQueriesReflectPendingChangesDuringDispatch()
+        {
+            const string name = "GameEventTests.Pending";
+            int id = RuntimeId.ToRuntimeId(name);
+            Action added = () => { };
+            Action removed = () => { };
+            Action change = null;
+            change = () =>
+            {
+                GameEvent.AddEventListener(name, added);
+                GameEvent.RemoveEventListener(id, removed);
+                GameEvent.RemoveEventListener(id, change);
+                Assert.IsTrue(GameEvent.HasEventListener(id, added));
+                Assert.IsTrue(GameEvent.HasEventListener(name, (Delegate)added));
+                Assert.IsFalse(GameEvent.HasEventListener(name, removed));
+                Assert.IsFalse(GameEvent.HasEventListener(id, change));
+            };
+            Assert.IsFalse(GameEvent.HasEventListener(id, added));
+            GameEvent.AddEventListener(id, change);
+            GameEvent.AddEventListener(name, removed);
+            GameEvent.Send(name);
+            Assert.IsTrue(GameEvent.HasEventListener(name, added));
+            Assert.IsFalse(GameEvent.HasEventListener(id, removed));
+            GameEvent.Send(id);
+            GameEvent.RemoveEventListener(name, added);
+            Assert.IsFalse(GameEvent.HasEventListener(id, (Delegate)added));
+        }
+
+        [Test] public void StringEventForwardsAllFourArgumentsAndSupportsTypedQuery()
+        {
+            const string name = "GameEventTests.FourArguments";
+            object[] received = null;
+            Action<int, string, bool, double> listener = (a, b, c, d) => received = new object[] { a, b, c, d };
+            GameEvent.AddEventListener(name, listener);
+            Assert.IsTrue(GameEvent.HasEventListener(name, listener));
+            Assert.IsTrue(GameEvent.HasEventListener(RuntimeId.ToRuntimeId(name), listener));
+            GameEvent.Send(name, 42, "payload", true, 3.5);
+            CollectionAssert.AreEqual(new object[] { 42, "payload", true, 3.5 }, received);
+        }
+
+        [Test] public void WrapperRegistrationIgnoresNullAndRejectsLegacyTypeNames()
+        {
+            var manager = new EventMgr();
+            manager.RegWrapInterface<IWrapper>(null);
+            Assert.IsNull(manager.GetInterface<IWrapper>());
+            var wrapper = new Wrapper();
+            manager.RegWrapInterface<IWrapper>(wrapper);
+            Assert.AreSame(wrapper, manager.GetInterface<IWrapper>());
+#pragma warning disable CS0618
+            Assert.Throws<NotSupportedException>(() => manager.RegWrapInterface(typeof(IWrapper).FullName, wrapper));
+#pragma warning restore CS0618
+        }
+
         [Test] public void InitClearsEventsAndRegisteredWrappers()
         {
             var wrapper = new Wrapper();

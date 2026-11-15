@@ -118,6 +118,119 @@ namespace EmberFrameWork
             return _eventMgr.Dispatcher.AddEventListener(eventType, handler);
         }
 
+        #region 是否存在事件监听
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener(int eventType, Action handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(eventType, handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1>(int eventType, Action<TArg1> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(eventType, handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <typeparam name="TArg2">事件参数2类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1, TArg2>(int eventType, Action<TArg1, TArg2> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(eventType, handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <typeparam name="TArg2">事件参数2类型。</typeparam>
+        /// <typeparam name="TArg3">事件参数3类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1, TArg2, TArg3>(int eventType, Action<TArg1, TArg2, TArg3> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(eventType, handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <typeparam name="TArg2">事件参数2类型。</typeparam>
+        /// <typeparam name="TArg3">事件参数3类型。</typeparam>
+        /// <typeparam name="TArg4">事件参数4类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1, TArg2, TArg3, TArg4>(int eventType, Action<TArg1, TArg2, TArg3, TArg4> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(eventType, handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <typeparam name="TArg2">事件参数2类型。</typeparam>
+        /// <typeparam name="TArg3">事件参数3类型。</typeparam>
+        /// <typeparam name="TArg4">事件参数4类型。</typeparam>
+        /// <typeparam name="TArg5">事件参数5类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1, TArg2, TArg3, TArg4, TArg5>(int eventType, Action<TArg1, TArg2, TArg3, TArg4, TArg5> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(eventType, handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <typeparam name="TArg2">事件参数2类型。</typeparam>
+        /// <typeparam name="TArg3">事件参数3类型。</typeparam>
+        /// <typeparam name="TArg4">事件参数4类型。</typeparam>
+        /// <typeparam name="TArg5">事件参数5类型。</typeparam>
+        /// <typeparam name="TArg6">事件参数6类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1, TArg2, TArg3, TArg4, TArg5, TArg6>(int eventType, Action<TArg1, TArg2, TArg3, TArg4, TArg5, TArg6> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(eventType, handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener(int eventType, Delegate handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(eventType, handler);
+        }
+
+        #endregion
+
         /// <summary>
         /// 移除事件监听。
         /// </summary>
@@ -285,6 +398,102 @@ namespace EmberFrameWork
             return _eventMgr.Dispatcher.AddEventListener(RuntimeId.ToRuntimeId(eventType), handler);
         }
 
+        #region 是否存在事件监听 (string Event)
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener(string eventType, Action handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(RuntimeId.ToRuntimeId(eventType), handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1>(string eventType, Action<TArg1> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(RuntimeId.ToRuntimeId(eventType), handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <typeparam name="TArg2">事件参数2类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1, TArg2>(string eventType, Action<TArg1, TArg2> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(RuntimeId.ToRuntimeId(eventType), handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <typeparam name="TArg2">事件参数2类型。</typeparam>
+        /// <typeparam name="TArg3">事件参数3类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1, TArg2, TArg3>(string eventType, Action<TArg1, TArg2, TArg3> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(RuntimeId.ToRuntimeId(eventType), handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <typeparam name="TArg2">事件参数2类型。</typeparam>
+        /// <typeparam name="TArg3">事件参数3类型。</typeparam>
+        /// <typeparam name="TArg4">事件参数4类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1, TArg2, TArg3, TArg4>(string eventType, Action<TArg1, TArg2, TArg3, TArg4> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(RuntimeId.ToRuntimeId(eventType), handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <typeparam name="TArg1">事件参数1类型。</typeparam>
+        /// <typeparam name="TArg2">事件参数2类型。</typeparam>
+        /// <typeparam name="TArg3">事件参数3类型。</typeparam>
+        /// <typeparam name="TArg4">事件参数4类型。</typeparam>
+        /// <typeparam name="TArg5">事件参数5类型。</typeparam>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener<TArg1, TArg2, TArg3, TArg4, TArg5>(string eventType, Action<TArg1, TArg2, TArg3, TArg4, TArg5> handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(RuntimeId.ToRuntimeId(eventType), handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理回调。</param>
+        /// <returns>是否存在事件监听。</returns>
+        public static bool HasEventListener(string eventType, Delegate handler)
+        {
+            return _eventMgr.Dispatcher.HasEventListener(RuntimeId.ToRuntimeId(eventType), handler);
+        }
+
+        #endregion
+
         /// <summary>
         /// 移除事件监听。
         /// </summary>
@@ -380,7 +589,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         public static void Send(int eventType)
@@ -389,7 +598,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -400,7 +609,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -413,7 +622,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -428,7 +637,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -445,7 +654,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -464,7 +673,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="handler">事件处理回调。</param>
@@ -475,7 +684,7 @@ namespace EmberFrameWork
 
         //-------------------------------string Send-------------------------------//
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         public static void Send(string eventType)
@@ -484,7 +693,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -495,7 +704,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -508,7 +717,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -523,7 +732,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -536,11 +745,11 @@ namespace EmberFrameWork
         /// <typeparam name="TArg4">事件参数4类型。</typeparam>
         public static void Send<TArg1, TArg2, TArg3, TArg4>(string eventType, TArg1 arg1, TArg2 arg2, TArg3 arg3, TArg4 arg4)
         {
-            _eventMgr.Dispatcher.Send(RuntimeId.ToRuntimeId(eventType), arg1, arg2, arg3);
+            _eventMgr.Dispatcher.Send(RuntimeId.ToRuntimeId(eventType), arg1, arg2, arg3, arg4);
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -559,7 +768,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="arg1">事件参数1。</param>
@@ -580,7 +789,7 @@ namespace EmberFrameWork
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="eventType">事件类型。</param>
         /// <param name="handler">事件处理回调。</param>

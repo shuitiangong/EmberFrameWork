@@ -12,7 +12,7 @@ namespace EmberFrameWork
         /// <summary>
         /// 事件Table。
         /// </summary>
-        private static readonly Dictionary<int, EventDelegateData> _eventTable = new Dictionary<int, EventDelegateData>();
+        private readonly Dictionary<int, EventDelegateData> _eventTable = new Dictionary<int, EventDelegateData>();
 
         /// <summary>
         /// 清空事件表。
@@ -21,7 +21,7 @@ namespace EmberFrameWork
         {
             _eventTable.Clear();
         }
-        
+
         #region 事件管理接口
 
         /// <summary>
@@ -39,6 +39,17 @@ namespace EmberFrameWork
             }
 
             return data.AddHandler(handler);
+        }
+
+        /// <summary>
+        /// 是否已注册事件监听。
+        /// </summary>
+        /// <param name="eventType">事件类型。</param>
+        /// <param name="handler">事件处理委托。</param>
+        /// <returns>是否存在事件监听。</returns>
+        public bool HasEventListener(int eventType, Delegate handler)
+        {
+            return _eventTable.TryGetValue(eventType, out var data) && data.HasHandler(handler);
         }
 
         /// <summary>
