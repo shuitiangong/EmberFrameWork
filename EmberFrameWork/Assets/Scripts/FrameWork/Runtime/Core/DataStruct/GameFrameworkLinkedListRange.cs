@@ -77,7 +77,7 @@ namespace EmberFrameWork
         {
             for (LinkedListNode<T> current = _first; current != null && current != _terminal; current = current.Next)
             {
-                if (EqualityComparer<T>.Default.Equals(current.Value, value))
+                if (current.Value.Equals(value))
                 {
                     return true;
                 }

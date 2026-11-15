@@ -33,7 +33,7 @@ namespace EmberFrameWork.Editor
         private static void RunMenu() => RunAndLog().Forget();
 
         [MenuItem("EmberFrameWork/Resources/验证加载与释放", true)]
-        private static bool CanRun() => !_running && Application.isPlaying && GameEntry.Instance != null && GameEntry.Instance.IsGameReady;
+        private static bool CanRun() => !_running && Application.isPlaying && Settings.Instance != null && Settings.ProcedureSetting != null && Settings.ProcedureSetting.CurrentProcedure is Procedure.ProcedureStartGame && ModuleSystem.GetModule<IResourceModule>().IsReady;
 
         private static async UniTaskVoid RunAndLog()
         {

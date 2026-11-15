@@ -2780,15 +2780,7 @@ namespace EmberFrameWork
 
         public static void Fatal(System.Exception exception)
         {
-            // 此重载与原版一样始终可调用；直接分发以保留异常对象和堆栈。
-            GameFrameworkLog.Fatal((object)exception);
-        }
-
-        /// <summary>始终记录原始异常与 Unity 对象上下文，不抛出新的异常。</summary>
-        public static void Exception(System.Exception exception, UnityEngine.Object context = null)
-        {
-            if (exception == null) throw new System.ArgumentNullException(nameof(exception));
-            UnityEngine.Debug.LogException(exception, context);
+            Fatal(exception.ToString());
         }
     }
 }

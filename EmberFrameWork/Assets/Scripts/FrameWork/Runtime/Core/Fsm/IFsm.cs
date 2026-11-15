@@ -10,12 +10,6 @@ namespace EmberFrameWork
     /// <typeparam name="T">有限状态机持有者类型。</typeparam>
     public interface IFsm<T> where T : class
     {
-        /// <summary>由持有者或后续接入的模块驱动更新。</summary>
-        void Update(float elapseSeconds, float realElapseSeconds);
-
-        /// <summary>退出当前状态并销毁所有状态；重复调用无副作用。</summary>
-        void Shutdown();
-
         /// <summary>
         /// 获取有限状态机名称。
         /// </summary>

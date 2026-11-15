@@ -8,9 +8,6 @@ namespace EmberFrameWork
     /// </summary>
     public interface IProcedureModule
     {
-        /// <summary>流程 FSM 已完成初始化且尚未销毁。</summary>
-        bool IsInitialized { get; }
-
         /// <summary>
         /// 获取当前流程。
         /// </summary>
@@ -80,7 +77,7 @@ namespace EmberFrameWork
         /// </summary>
         /// <param name="procedures">新的的流程。</param>
         /// <returns>是否重启成功。</returns>
-        /// <exception cref="InvalidOperationException">重启异常。</exception>
+        /// <exception cref="GameFrameworkException">重启异常。</exception>
         bool RestartProcedure(params ProcedureBase[] procedures);
     }
 }

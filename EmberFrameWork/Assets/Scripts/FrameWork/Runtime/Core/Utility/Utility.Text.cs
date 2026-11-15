@@ -8,11 +8,7 @@ namespace EmberFrameWork
         /// </summary>
         public static partial class Text
         {
-            private static ITextHelper _textHelper = new DefaultTextHelper();
-
-            /// <summary>进入运行模式恢复默认文本辅助器；传入 null 可使用 string.Format。</summary>
-            [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
-            public static void ResetTextHelper() => _textHelper = new DefaultTextHelper();
+            private static ITextHelper _textHelper = null;
 
             /// <summary>
             /// 设置字符辅助器。

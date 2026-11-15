@@ -30,7 +30,7 @@ namespace EmberFrameWork
         /// <summary>
         /// 获取有限状态机完整名称。
         /// </summary>
-        public string FullName => string.IsNullOrEmpty(_name) ? OwnerType.FullName : string.Format("{0}.{1}", OwnerType.FullName, _name);
+        public string FullName => new TypeNamePair(OwnerType, _name).ToString();
 
         /// <summary>
         /// 获取有限状态机持有者类型。
@@ -85,11 +85,11 @@ namespace EmberFrameWork
         /// </summary>
         /// <param name="elapseSeconds">逻辑流逝时间，以秒为单位。</param>
         /// <param name="realElapseSeconds">当前已流逝时间，以秒为单位。</param>
-        public abstract void Update(float elapseSeconds, float realElapseSeconds);
+        internal abstract void Update(float elapseSeconds, float realElapseSeconds);
 
         /// <summary>
         /// 关闭并清理有限状态机。
         /// </summary>
-        public abstract void Shutdown();
+        internal abstract void Shutdown();
     }
 }

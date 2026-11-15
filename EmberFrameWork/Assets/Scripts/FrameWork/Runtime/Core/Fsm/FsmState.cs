@@ -9,9 +9,6 @@ namespace EmberFrameWork
     /// <typeparam name="T">有限状态机持有者类型。</typeparam>
     public abstract class FsmState<T> where T : class
     {
-        // A live state instance belongs to exactly one FSM.
-        internal IFsm<T> BoundFsm { get; set; }
-
         /// <summary>
         /// 初始化有限状态机状态基类的新实例。
         /// </summary>
@@ -69,14 +66,11 @@ namespace EmberFrameWork
         /// <param name="fsm">有限状态机引用。</param>
         protected void ChangeState<TState>(IFsm<T> fsm) where TState : FsmState<T>
         {
-            Fsm<T> fsmImplement = fsm as Fsm<T>;
+            Fsm<T> fsmImplement = (Fsm<T>)fsm;
             if (fsmImplement == null)
             {
-                throw new InvalidOperationException("FSM is invalid.");
+                throw new GameFrameworkException("FSM is invalid.");
             }
-
-            if (!ReferenceEquals(BoundFsm, fsm) || !ReferenceEquals(fsm.CurrentState, this))
-                throw new InvalidOperationException("Only the current state can request a transition.");
 
             fsmImplement.ChangeState<TState>();
         }
@@ -88,23 +82,20 @@ namespace EmberFrameWork
         /// <param name="stateType">要切换到的有限状态机状态类型。</param>
         protected void ChangeState(IFsm<T> fsm, Type stateType)
         {
-            Fsm<T> fsmImplement = fsm as Fsm<T>;
+            Fsm<T> fsmImplement = (Fsm<T>)fsm;
             if (fsmImplement == null)
             {
-                throw new InvalidOperationException("FSM is invalid.");
+                throw new GameFrameworkException("FSM is invalid.");
             }
 
             if (stateType == null)
             {
-                throw new InvalidOperationException("State type is invalid.");
+                throw new GameFrameworkException("State type is invalid.");
             }
-
-            if (!ReferenceEquals(BoundFsm, fsm) || !ReferenceEquals(fsm.CurrentState, this))
-                throw new InvalidOperationException("Only the current state can request a transition.");
 
             if (!typeof(FsmState<T>).IsAssignableFrom(stateType))
             {
-                throw new InvalidOperationException(string.Format("State type '{0}' is invalid.", stateType.FullName));
+                throw new GameFrameworkException(Utility.Text.Format("State type '{0}' is invalid.", stateType.FullName));
             }
 
             fsmImplement.ChangeState(stateType);

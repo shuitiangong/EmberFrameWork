@@ -124,7 +124,7 @@ namespace EmberFrameWork
             {
                 for (LinkedListNode<TValue> current = range.First; current != null && current != range.Terminal; current = current.Next)
                 {
-                    if (EqualityComparer<TValue>.Default.Equals(current.Value, value))
+                    if (current.Value.Equals(value))
                     {
                         if (current == range.First)
                         {
@@ -252,10 +252,7 @@ namespace EmberFrameWork
             /// </summary>
             void IEnumerator.Reset()
             {
-                // Reset 修改的是装箱副本，需要写回值类型枚举器。
-                IEnumerator enumerator = _enumerator;
-                enumerator.Reset();
-                _enumerator = (Dictionary<TKey, GameFrameworkLinkedListRange<TValue>>.Enumerator)enumerator;
+                ((IEnumerator<KeyValuePair<TKey, GameFrameworkLinkedListRange<TValue>>>)_enumerator).Reset();
             }
         }
     }

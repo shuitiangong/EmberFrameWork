@@ -69,7 +69,7 @@ namespace EmberFrameWork
         /// <returns>对象的哈希值。</returns>
         public override int GetHashCode()
         {
-            return (_type?.GetHashCode() ?? 0) ^ (_name?.GetHashCode() ?? 0);
+            return _type.GetHashCode() ^ _name.GetHashCode();
         }
 
         /// <summary>

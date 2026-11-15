@@ -4,186 +4,205 @@ using System.Collections.Generic;
 
 namespace EmberFrameWork
 {
-    /// <summary>单线程模块注册与生命周期管理。由启动入口显式调用 Update 和 Shutdown。</summary>
+    /// <summary>
+    /// 游戏框架模块实现类管理系统。
+    /// </summary>
     public static class ModuleSystem
     {
-        private sealed class Entry
-        {
-            public readonly Module Module;
-            public readonly int Priority;
-            public Entry(Module module) { Module = module; Priority = module.Priority; }
-        }
+        /// <summary>
+        /// 默认设计的模块数量。
+        /// <remarks>有增删可以自行修改减少内存分配与GCAlloc。</remarks>
+        /// </summary>
+        internal const int DESIGN_MODULE_COUNT = 16;
 
-        private static readonly Dictionary<Type, Entry> Interfaces = new Dictionary<Type, Entry>();
-        private static readonly Dictionary<Type, Entry> Implementations = new Dictionary<Type, Entry>();
-        private static readonly List<Entry> Modules = new List<Entry>();
-        private static readonly List<Entry> UpdateSnapshot = new List<Entry>();
-        private static readonly HashSet<Type> ConstructingTypes = new HashSet<Type>();
-        private static readonly HashSet<Type> InitializingTypes = new HashSet<Type>();
-        private static readonly HashSet<Type> InitializingInterfaces = new HashSet<Type>();
-        private static bool _updating;
-        private static bool _shuttingDown;
-        private static int _shutdownVersion;
+        private static readonly Dictionary<Type, Module> _moduleMaps = new Dictionary<Type, Module>(DESIGN_MODULE_COUNT);
+        private static readonly LinkedList<Module> _modules = new LinkedList<Module>();
+        private static readonly LinkedList<Module> _updateModules = new LinkedList<Module>();
+        private static readonly List<IUpdateModule> _updateExecuteList = new List<IUpdateModule>(DESIGN_MODULE_COUNT);
 
-        /// <summary>已初始化的模块实例数量；同一实例的多个接口只计一次。</summary>
-        public static int Count => Modules.Count;
+        private static bool _isExecuteListDirty;
 
         /// <summary>
-        /// 获取模块。未注册时按同程序集、同命名空间的 IFoo → Foo 约定创建。
-        /// 自定义实现或需要保留静态构造引用时使用 RegisterModule。
+        /// 所有游戏框架模块轮询。
         /// </summary>
-        public static T GetModule<T>() where T : class
-        {
-            Type contract = ValidateInterface<T>();
-            if (Interfaces.TryGetValue(contract, out var existing)) return (T)(object)existing.Module;
-            EnsureCanRegister();
-            if (InitializingInterfaces.Contains(contract))
-                throw new InvalidOperationException($"Circular module initialization: {contract.FullName}.");
-            if (!contract.Name.StartsWith("I", StringComparison.Ordinal) || contract.Name.Length < 2)
-                throw new InvalidOperationException($"No registered module for {contract.FullName}.");
-
-            string implementationName = string.IsNullOrEmpty(contract.Namespace)
-                ? contract.Name.Substring(1)
-                : contract.Namespace + "." + contract.Name.Substring(1);
-            Type implementation = contract.Assembly.GetType(implementationName, false);
-            if (implementation == null || implementation.IsAbstract || implementation.ContainsGenericParameters ||
-                !typeof(Module).IsAssignableFrom(implementation) || !contract.IsAssignableFrom(implementation))
-                throw new InvalidOperationException($"Cannot resolve module {implementationName} for {contract.FullName}.");
-
-            if (Implementations.TryGetValue(implementation, out existing))
-            {
-                Interfaces.Add(contract, existing);
-                return (T)(object)existing.Module;
-            }
-            if (InitializingTypes.Contains(implementation) || !ConstructingTypes.Add(implementation))
-                throw new InvalidOperationException($"Circular module construction: {implementation.FullName}.");
-            try
-            {
-                return RegisterModule<T>((Module)Activator.CreateInstance(implementation, true));
-            }
-            finally { ConstructingTypes.Remove(implementation); }
-        }
-
-        /// <summary>按接口显式注册；重复注册同一实例直接返回，替换存活实例会报错。</summary>
-        public static T RegisterModule<T>(Module module) where T : class
-        {
-            Type contract = ValidateInterface<T>();
-            if (module == null) throw new ArgumentNullException(nameof(module));
-            if (!(module is T result)) throw new ArgumentException($"Module must implement {contract.FullName}.", nameof(module));
-            EnsureCanRegister();
-            Type implementation = module.GetType();
-            if (InitializingInterfaces.Contains(contract) || InitializingTypes.Contains(implementation))
-                throw new InvalidOperationException($"Circular module initialization: {contract.FullName}.");
-            if (Interfaces.TryGetValue(contract, out var existing))
-            {
-                if (!ReferenceEquals(existing.Module, module))
-                    throw new InvalidOperationException($"Module interface already registered: {contract.FullName}.");
-                return result;
-            }
-            if (Implementations.TryGetValue(implementation, out existing))
-            {
-                if (!ReferenceEquals(existing.Module, module))
-                    throw new InvalidOperationException($"Module implementation already registered: {implementation.FullName}.");
-                Interfaces.Add(contract, existing);
-                return result;
-            }
-
-            var entry = new Entry(module);
-            InitializingInterfaces.Add(contract);
-            InitializingTypes.Add(implementation);
-            try
-            {
-                try { module.OnInit(); }
-                catch (Exception initializationError)
-                {
-                    try { module.Shutdown(); }
-                    catch (Exception cleanupError)
-                    {
-                        throw new AggregateException("Module initialization and cleanup failed.", initializationError, cleanupError);
-                    }
-                    throw;
-                }
-                // Publish only fully initialized modules. Equal priorities preserve registration order.
-                int index = Modules.FindIndex(item => item.Priority < entry.Priority);
-                if (index < 0) Modules.Add(entry);
-                else Modules.Insert(index, entry);
-                Implementations.Add(implementation, entry);
-                Interfaces.Add(contract, entry);
-                return result;
-            }
-            finally
-            {
-                InitializingInterfaces.Remove(contract);
-                InitializingTypes.Remove(implementation);
-            }
-        }
-
-        /// <summary>更新期间新注册的模块从下一次 Update 开始执行。</summary>
+        /// <param name="elapseSeconds">逻辑流逝时间，以秒为单位。</param>
+        /// <param name="realElapseSeconds">真实流逝时间，以秒为单位。</param>
         public static void Update(float elapseSeconds, float realElapseSeconds)
         {
-            if (_shuttingDown || InitializingTypes.Count != 0 || ConstructingTypes.Count != 0)
-                throw new InvalidOperationException("Cannot update modules during initialization or shutdown.");
-            if (_updating) throw new InvalidOperationException("Recursive module updates are not supported.");
-            _updating = true;
-            int version = _shutdownVersion;
-            UpdateSnapshot.AddRange(Modules);
-            try
+            if (_isExecuteListDirty)
             {
-                foreach (var entry in UpdateSnapshot)
-                {
-                    if (version != _shutdownVersion) break;
-                    if (entry.Module is IUpdateModule updateModule)
-                        updateModule.Update(elapseSeconds, realElapseSeconds);
-                }
+                _isExecuteListDirty = false;
+                BuildExecuteList();
             }
-            finally
+
+            int executeCount = _updateExecuteList.Count;
+            for (int i = 0; i < executeCount; i++)
             {
-                UpdateSnapshot.Clear();
-                _updating = false;
+                _updateExecuteList[i].Update(elapseSeconds, realElapseSeconds);
             }
         }
 
-        /// <summary>按更新顺序的逆序关闭；尽量清理所有模块后汇总异常，可重复调用。</summary>
+        /// <summary>
+        /// 关闭并清理所有游戏框架模块。
+        /// </summary>
         public static void Shutdown()
         {
-            if (_shuttingDown) return;
-            if (InitializingTypes.Count != 0 || ConstructingTypes.Count != 0)
-                throw new InvalidOperationException("Cannot shut down the module system during initialization.");
-            _shuttingDown = true;
-            _shutdownVersion++;
-            List<Exception> errors = null;
-            try
+            for (LinkedListNode<Module> current = _modules.Last; current != null; current = current.Previous)
             {
-                for (int i = Modules.Count - 1; i >= 0; i--)
+                current.Value.Shutdown();
+            }
+
+            _modules.Clear();
+            _moduleMaps.Clear();
+            _updateModules.Clear();
+            _updateExecuteList.Clear();
+            MemoryPool.ClearAll();
+        }
+
+        /// <summary>
+        /// 获取游戏框架模块。
+        /// </summary>
+        /// <typeparam name="T">要获取的游戏框架模块类型。</typeparam>
+        /// <returns>要获取的游戏框架模块。</returns>
+        /// <remarks>如果要获取的游戏框架模块不存在，则自动创建该游戏框架模块。</remarks>
+        public static T GetModule<T>() where T : class
+        {
+            Type interfaceType = typeof(T);
+            if (!interfaceType.IsInterface)
+            {
+                throw new GameFrameworkException(Utility.Text.Format("You must get module by interface, but '{0}' is not.", interfaceType.FullName));
+            }
+
+            if (_moduleMaps.TryGetValue(interfaceType, out Module module))
+            {
+                return module as T;
+            }
+
+            string moduleName = Utility.Text.Format("{0}.{1}", interfaceType.Namespace, interfaceType.Name.Substring(1));
+            Type moduleType = Type.GetType(moduleName);
+            if (moduleType == null)
+            {
+                throw new GameFrameworkException(Utility.Text.Format("Can not find Game Framework module type '{0}'.", moduleName));
+            }
+
+            return GetModule(moduleType) as T;
+        }
+
+        /// <summary>
+        /// 获取游戏框架模块。
+        /// </summary>
+        /// <param name="moduleType">要获取的游戏框架模块类型。</param>
+        /// <returns>要获取的游戏框架模块。</returns>
+        /// <remarks>如果要获取的游戏框架模块不存在，则自动创建该游戏框架模块。</remarks>
+        private static Module GetModule(Type moduleType)
+        {
+            return _moduleMaps.TryGetValue(moduleType, out Module module) ? module : CreateModule(moduleType);
+        }
+
+        /// <summary>
+        /// 创建游戏框架模块。
+        /// </summary>
+        /// <param name="moduleType">要创建的游戏框架模块类型。</param>
+        /// <returns>要创建的游戏框架模块。</returns>
+        private static Module CreateModule(Type moduleType)
+        {
+            Module module = (Module)Activator.CreateInstance(moduleType);
+            if (module == null)
+            {
+                throw new GameFrameworkException(Utility.Text.Format("Can not create module '{0}'.", moduleType.FullName));
+            }
+
+            _moduleMaps[moduleType] = module;
+
+            RegisterUpdate(module);
+
+            return module;
+        }
+
+        /// <summary>
+        /// 注册自定义Module。
+        /// </summary>
+        /// <param name="module">Module。</param>
+        /// <returns>Module实例。</returns>
+        /// <exception cref="GameFrameworkException">框架异常。</exception>
+        public static T RegisterModule<T>(Module module) where T : class
+        {
+            Type interfaceType = typeof(T);
+            if (!interfaceType.IsInterface)
+            {
+                throw new GameFrameworkException(Utility.Text.Format("You must get module by interface, but '{0}' is not.", interfaceType.FullName));
+            }
+
+            _moduleMaps[interfaceType] = module;
+
+            RegisterUpdate(module);
+
+            return module as T;
+        }
+
+        private static void RegisterUpdate(Module module)
+        {
+            LinkedListNode<Module> current = _modules.First;
+            while (current != null)
+            {
+                if (module.Priority > current.Value.Priority)
                 {
-                    try { Modules[i].Module.Shutdown(); }
-                    catch (Exception error)
-                    {
-                        if (errors == null) errors = new List<Exception>();
-                        errors.Add(error);
-                    }
+                    break;
                 }
+
+                current = current.Next;
             }
-            finally
+
+            if (current != null)
             {
-                Modules.Clear();
-                Interfaces.Clear();
-                Implementations.Clear();
-                _shuttingDown = false;
+                _modules.AddBefore(current, module);
             }
-            if (errors != null) throw new AggregateException("Module shutdown callbacks failed.", errors);
+            else
+            {
+                _modules.AddLast(module);
+            }
+
+            Type interfaceType = typeof(IUpdateModule);
+            bool implementsInterface = interfaceType.IsInstanceOfType(module);
+
+            if (implementsInterface)
+            {
+                LinkedListNode<Module> currentUpdate = _updateModules.First;
+                while (currentUpdate != null)
+                {
+                    if (module.Priority > currentUpdate.Value.Priority)
+                    {
+                        break;
+                    }
+
+                    currentUpdate = currentUpdate.Next;
+                }
+
+                if (currentUpdate != null)
+                {
+                    _updateModules.AddBefore(currentUpdate, module);
+                }
+                else
+                {
+                    _updateModules.AddLast(module);
+                }
+
+                _isExecuteListDirty = true;
+            }
+
+            module.OnInit();
         }
 
-        private static Type ValidateInterface<T>() where T : class
+        /// <summary>
+        /// 构造执行队列。
+        /// </summary>
+        private static void BuildExecuteList()
         {
-            Type type = typeof(T);
-            if (!type.IsInterface) throw new ArgumentException($"Modules must be requested by interface: {type.FullName}.");
-            return type;
-        }
-
-        private static void EnsureCanRegister()
-        {
-            if (_shuttingDown) throw new InvalidOperationException("Cannot create or register modules during shutdown.");
+            _updateExecuteList.Clear();
+            foreach (var updateModule in _updateModules)
+            {
+                _updateExecuteList.Add(updateModule as IUpdateModule);
+            }
         }
     }
 }

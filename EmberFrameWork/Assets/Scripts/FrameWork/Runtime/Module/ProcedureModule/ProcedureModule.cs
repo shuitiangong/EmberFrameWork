@@ -1,135 +1,210 @@
 // Adapted from TEngine (Copyright (c) 2022 ALEXTANG, MIT). See LICENSE.txt.
 using System;
-using System.Collections.Generic;
-using UnityEngine.Scripting;
 
 namespace EmberFrameWork
 {
-    [Preserve]
+    /// <summary>
+    /// 流程管理器。
+    /// </summary>
     internal sealed class ProcedureModule : Module, IProcedureModule
     {
         private IFsmModule _fsmModule;
         private IFsm<IProcedureModule> _procedureFsm;
-        private bool _changing;
-        private bool _closed;
 
-        [Preserve] public ProcedureModule() { }
+        /// <summary>
+        /// 初始化流程管理器的新实例。
+        /// </summary>
+        public ProcedureModule()
+        {
+            _fsmModule = null;
+            _procedureFsm = null;
+        }
+
+        /// <summary>
+        /// 获取游戏框架模块优先级。
+        /// </summary>
+        /// <remarks>优先级较高的模块会优先轮询，并且关闭操作会后进行。</remarks>
         public override int Priority => -2;
-        public bool IsInitialized => !_closed && _procedureFsm != null && !_procedureFsm.IsDestroyed;
-        public ProcedureBase CurrentProcedure => (ProcedureBase)RequireFsm().CurrentState;
-        public float CurrentProcedureTime => RequireFsm().CurrentStateTime;
-        public override void OnInit() => ThrowIfClosed();
 
-        public void Initialize(IFsmModule fsmModule, params ProcedureBase[] procedures)
+        /// <summary>
+        /// 获取当前流程。
+        /// </summary>
+        public ProcedureBase CurrentProcedure
         {
-            EnsureCanChange();
-            if (fsmModule == null) throw new ArgumentNullException(nameof(fsmModule));
-            if (IsInitialized) throw new InvalidOperationException("Procedures are already initialized. Use RestartProcedure.");
-            ValidateProcedures(procedures, null);
-            _changing = true;
-            try
+            get
             {
-                var fsm = fsmModule.CreateFsm<IProcedureModule>(this, procedures);
-                _fsmModule = fsmModule;
-                _procedureFsm = fsm;
+                if (_procedureFsm == null)
+                {
+                    throw new GameFrameworkException("You must initialize procedure first.");
+                }
+
+                return (ProcedureBase)_procedureFsm.CurrentState;
             }
-            finally { _changing = false; }
         }
 
-        public void StartProcedure<T>() where T : ProcedureBase => StartProcedure(typeof(T));
-        public void StartProcedure(Type procedureType)
+        /// <summary>
+        /// 获取当前流程持续时间。
+        /// </summary>
+        public float CurrentProcedureTime
         {
-            EnsureCanChange();
-            ValidateProcedureType(procedureType);
-            RequireFsm().Start(procedureType);
-        }
-
-        public bool HasProcedure<T>() where T : ProcedureBase => HasProcedure(typeof(T));
-        public bool HasProcedure(Type procedureType)
-        {
-            ValidateProcedureType(procedureType);
-            return RequireFsm().HasState(procedureType);
-        }
-
-        public ProcedureBase GetProcedure<T>() where T : ProcedureBase => GetProcedure(typeof(T));
-        public ProcedureBase GetProcedure(Type procedureType)
-        {
-            ValidateProcedureType(procedureType);
-            return (ProcedureBase)RequireFsm().GetState(procedureType);
-        }
-
-        /// <summary>验证新流程列表后关闭旧流程，并以新列表第一项启动。</summary>
-        public bool RestartProcedure(params ProcedureBase[] procedures)
-        {
-            EnsureCanChange();
-            var previous = RequireFsm();
-            ValidateProcedures(procedures, previous);
-            _changing = true;
-            try
+            get
             {
-                if (!_fsmModule.DestroyFsm(previous)) return false;
-                _procedureFsm = null;
-                _procedureFsm = _fsmModule.CreateFsm<IProcedureModule>(this, procedures);
-                _procedureFsm.Start(procedures[0].GetType());
-                return true;
+                if (_procedureFsm == null)
+                {
+                    throw new GameFrameworkException("You must initialize procedure first.");
+                }
+
+                return _procedureFsm.CurrentStateTime;
             }
-            finally { _changing = false; }
         }
 
+        public override void OnInit()
+        {
+        }
+
+        /// <summary>
+        /// 关闭并清理流程管理器。
+        /// </summary>
         public override void Shutdown()
         {
-            if (_closed) return;
-            EnsureCanChange();
-            _closed = true;
-            try
+            if (_fsmModule != null)
             {
-                if (_procedureFsm != null && !_procedureFsm.IsDestroyed)
+                if (_procedureFsm != null)
+                {
                     _fsmModule.DestroyFsm(_procedureFsm);
-            }
-            finally
-            {
-                _procedureFsm = null;
+                    _procedureFsm = null;
+                }
+
                 _fsmModule = null;
             }
         }
 
-        private IFsm<IProcedureModule> RequireFsm()
+        /// <summary>
+        /// 初始化流程管理器。
+        /// </summary>
+        /// <param name="fsmModule">有限状态机管理器。</param>
+        /// <param name="procedures">流程管理器包含的流程。</param>
+        public void Initialize(IFsmModule fsmModule, params ProcedureBase[] procedures)
         {
-            ThrowIfClosed();
-            if (!IsInitialized) throw new InvalidOperationException("Initialize procedures before using them.");
-            return _procedureFsm;
-        }
-
-        private void EnsureCanChange()
-        {
-            ThrowIfClosed();
-            if (_changing) throw new InvalidOperationException("A procedure lifecycle operation is already in progress.");
-        }
-
-        private void ThrowIfClosed()
-        {
-            if (_closed) throw new ObjectDisposedException(nameof(ProcedureModule));
-        }
-
-        private static void ValidateProcedureType(Type type)
-        {
-            if (type == null) throw new ArgumentNullException(nameof(type));
-            if (!typeof(ProcedureBase).IsAssignableFrom(type))
-                throw new ArgumentException("Type must derive from ProcedureBase.", nameof(type));
-        }
-
-        private static void ValidateProcedures(ProcedureBase[] procedures, IFsm<IProcedureModule> reusableFsm)
-        {
-            if (procedures == null) throw new ArgumentNullException(nameof(procedures));
-            if (procedures.Length == 0) throw new ArgumentException("At least one procedure is required.", nameof(procedures));
-            var types = new HashSet<Type>();
-            foreach (var procedure in procedures)
+            if (fsmModule == null)
             {
-                if (procedure == null) throw new ArgumentException("Procedures must not contain null.", nameof(procedures));
-                if (!types.Add(procedure.GetType())) throw new ArgumentException("Duplicate procedure type.", nameof(procedures));
-                if (procedure.BoundFsm != null && !ReferenceEquals(procedure.BoundFsm, reusableFsm))
-                    throw new InvalidOperationException("Procedure already belongs to another FSM.");
+                throw new GameFrameworkException("FSM manager is invalid.");
             }
+
+            _fsmModule = fsmModule;
+            _procedureFsm = _fsmModule.CreateFsm(this, procedures);
+        }
+
+        /// <summary>
+        /// 开始流程。
+        /// </summary>
+        /// <typeparam name="T">要开始的流程类型。</typeparam>
+        public void StartProcedure<T>() where T : ProcedureBase
+        {
+            if (_procedureFsm == null)
+            {
+                throw new GameFrameworkException("You must initialize procedure first.");
+            }
+
+            _procedureFsm.Start<T>();
+        }
+
+        /// <summary>
+        /// 开始流程。
+        /// </summary>
+        /// <param name="procedureType">要开始的流程类型。</param>
+        public void StartProcedure(Type procedureType)
+        {
+            if (_procedureFsm == null)
+            {
+                throw new GameFrameworkException("You must initialize procedure first.");
+            }
+
+            _procedureFsm.Start(procedureType);
+        }
+
+        /// <summary>
+        /// 是否存在流程。
+        /// </summary>
+        /// <typeparam name="T">要检查的流程类型。</typeparam>
+        /// <returns>是否存在流程。</returns>
+        public bool HasProcedure<T>() where T : ProcedureBase
+        {
+            if (_procedureFsm == null)
+            {
+                throw new GameFrameworkException("You must initialize procedure first.");
+            }
+
+            return _procedureFsm.HasState<T>();
+        }
+
+        /// <summary>
+        /// 是否存在流程。
+        /// </summary>
+        /// <param name="procedureType">要检查的流程类型。</param>
+        /// <returns>是否存在流程。</returns>
+        public bool HasProcedure(Type procedureType)
+        {
+            if (_procedureFsm == null)
+            {
+                throw new GameFrameworkException("You must initialize procedure first.");
+            }
+
+            return _procedureFsm.HasState(procedureType);
+        }
+
+        /// <summary>
+        /// 获取流程。
+        /// </summary>
+        /// <typeparam name="T">要获取的流程类型。</typeparam>
+        /// <returns>要获取的流程。</returns>
+        public ProcedureBase GetProcedure<T>() where T : ProcedureBase
+        {
+            if (_procedureFsm == null)
+            {
+                throw new GameFrameworkException("You must initialize procedure first.");
+            }
+
+            return _procedureFsm.GetState<T>();
+        }
+
+        /// <summary>
+        /// 获取流程。
+        /// </summary>
+        /// <param name="procedureType">要获取的流程类型。</param>
+        /// <returns>要获取的流程。</returns>
+        public ProcedureBase GetProcedure(Type procedureType)
+        {
+            if (_procedureFsm == null)
+            {
+                throw new GameFrameworkException("You must initialize procedure first.");
+            }
+
+            return (ProcedureBase)_procedureFsm.GetState(procedureType);
+        }
+
+        /// <summary>
+        /// 重启流程。
+        /// <remarks>默认使用第一个流程作为启动流程。</remarks>
+        /// </summary>
+        /// <param name="procedures">新的的流程。</param>
+        /// <returns>是否重启成功。</returns>
+        /// <exception cref="GameFrameworkException">重启异常。</exception>
+        public bool RestartProcedure(params ProcedureBase[] procedures)
+        {
+            if (procedures == null || procedures.Length <= 0)
+            {
+                throw new GameFrameworkException("RestartProcedure Failed procedures is invalid.");
+            }
+
+            if (!_fsmModule.DestroyFsm<IProcedureModule>())
+            {
+                return false;
+            }
+
+            Initialize(_fsmModule, procedures);
+            StartProcedure(procedures[0].GetType());
+            return true;
         }
     }
 }

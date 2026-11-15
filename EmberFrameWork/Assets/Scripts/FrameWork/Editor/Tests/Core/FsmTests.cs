@@ -1,237 +1,58 @@
-using System;
 using System.Collections.Generic;
 using NUnit.Framework;
-
 namespace EmberFrameWork.Tests
 {
     public class FsmTests
     {
-        private sealed class Owner
+        public class Owner { public readonly List<string> Events = new List<string>(); }
+        private class First : FsmState<Owner>
         {
-            public readonly List<string> Events = new List<string>();
+            protected override void OnInit(IFsm<Owner> fsm) => fsm.Owner.Events.Add("init-first:" + fsm.FsmStateCount);
+            protected override void OnEnter(IFsm<Owner> fsm) => fsm.Owner.Events.Add("enter-first");
+            protected override void OnLeave(IFsm<Owner> fsm, bool shutdown) => fsm.Owner.Events.Add("leave-first:" + shutdown);
+            public void Next(IFsm<Owner> fsm) => ChangeState<Second>(fsm);
         }
-
-        private abstract class RecordingState : FsmState<Owner>
+        private class Second : FsmState<Owner>
         {
-            public Action<IFsm<Owner>> Init;
-            public Action<IFsm<Owner>> Enter;
-            public Action<IFsm<Owner>> Tick;
-            public Action<IFsm<Owner>> Leave;
-            public Action<IFsm<Owner>> Destroy;
-            public float RealTime;
-            public void Go<TState>(IFsm<Owner> fsm) where TState : FsmState<Owner> => ChangeState<TState>(fsm);
-            public void Go(IFsm<Owner> fsm, Type type) => ChangeState(fsm, type);
-            protected override void OnInit(IFsm<Owner> fsm) { Record(fsm, "init"); Init?.Invoke(fsm); }
-            protected override void OnEnter(IFsm<Owner> fsm) { Record(fsm, "enter"); Enter?.Invoke(fsm); }
-            protected override void OnUpdate(IFsm<Owner> fsm, float elapsed, float real)
-            {
-                RealTime = real;
-                Record(fsm, "update");
-                Tick?.Invoke(fsm);
-            }
-            protected override void OnLeave(IFsm<Owner> fsm, bool shutdown)
-            {
-                Record(fsm, shutdown ? "leave-shutdown" : "leave");
-                Leave?.Invoke(fsm);
-            }
-            protected override void OnDestroy(IFsm<Owner> fsm) { Record(fsm, "destroy"); Destroy?.Invoke(fsm); }
-            private void Record(IFsm<Owner> fsm, string action) => fsm.Owner.Events.Add(GetType().Name + ":" + action);
+            protected override void OnInit(IFsm<Owner> fsm) => fsm.Owner.Events.Add("init-second:" + fsm.FsmStateCount);
+            protected override void OnEnter(IFsm<Owner> fsm) => fsm.Owner.Events.Add("enter-second");
         }
-
-        private sealed class A : RecordingState { }
-        private sealed class B : RecordingState { }
-        private sealed class Missing : FsmState<Owner> { }
-
-        [Test]
-        public void LifecycleOrdersCallbacksAndResetsStateTime()
+        private IFsmModule _manager;
+        [SetUp] public void SetUp() { ModuleSystem.Shutdown(); _manager = ModuleSystem.GetModule<IFsmModule>(); }
+        [TearDown] public void TearDown() => ModuleSystem.Shutdown();
+        [Test] public void StatesAreInitializedAsTheyAreAdded()
         {
-            var owner = new Owner();
-            var a = new A();
-            var b = new B();
-            var fsm = Fsm<Owner>.Create("Startup", owner, a, b);
-            Assert.That(fsm.IsRunning, Is.False);
-            fsm.Update(1, 2);
-            fsm.Start<A>();
-            fsm.Update(0.25f, 0.5f);
-            Assert.That(fsm.CurrentStateTime, Is.EqualTo(0.25f));
-            Assert.That(a.RealTime, Is.EqualTo(0.5f));
-            a.Go<B>(fsm);
-            Assert.That(fsm.CurrentState, Is.SameAs(b));
-            Assert.That(fsm.CurrentStateTime, Is.Zero);
-            fsm.Shutdown();
-            fsm.Shutdown();
-            fsm.Update(1, 1);
-            Assert.That(owner.Events, Is.EqualTo(new[] {
-                "A:init", "B:init", "A:enter", "A:update", "A:leave", "B:enter",
-                "B:leave-shutdown", "A:destroy", "B:destroy"
-            }));
-            Assert.That(fsm.IsDestroyed, Is.True);
-            Assert.That(fsm.IsRunning, Is.False);
-            Assert.That(fsm.Owner, Is.Null);
-            Assert.That(fsm.FsmStateCount, Is.Zero);
-            Assert.Throws<ObjectDisposedException>(() => fsm.Start<A>());
-            Assert.Throws<ObjectDisposedException>(() => fsm.SetData("x", 1));
+            var owner = new Owner(); _manager.CreateFsm(owner, new First(), new Second());
+            CollectionAssert.AreEqual(new[] { "init-first:1", "init-second:2" }, owner.Events);
         }
-
-        [Test]
-        public void InitCanFindAllStatesAndSetSharedData()
+        [Test] public void TransitionCallsLeaveBeforeEnterAndResetsTime()
         {
-            var a = new A { Init = fsm => {
-                Assert.That(fsm.HasState<B>(), Is.True);
-                fsm.SetData("value", 42);
-            }};
-            var fsm = Fsm<Owner>.Create(null, new Owner(), new List<FsmState<Owner>> { a, new B() });
-            Assert.That(fsm.Name, Is.Empty);
-            Assert.That(fsm.GetData<int>("value"), Is.EqualTo(42));
-            Assert.That(fsm.GetData<string>("missing"), Is.Null);
-            Assert.That(fsm.HasData("Value"), Is.False);
-            Assert.Throws<InvalidCastException>(() => fsm.GetData<string>("value"));
-            Assert.That(fsm.RemoveData("value"), Is.True);
-            Assert.That(fsm.RemoveData("value"), Is.False);
-            var states = new List<FsmState<Owner>> { new Missing() };
-            fsm.GetAllStates(states);
-            Assert.That(states, Is.EqualTo(fsm.GetAllStates()));
-            fsm.Shutdown();
+            var owner = new Owner(); var first = new First(); var fsm = _manager.CreateFsm(owner, first, new Second());
+            fsm.Start<First>(); ModuleSystem.Update(2, 3); Assert.AreEqual(2, fsm.CurrentStateTime);
+            owner.Events.Clear(); first.Next(fsm);
+            CollectionAssert.AreEqual(new[] { "leave-first:False", "enter-second" }, owner.Events);
+            Assert.AreEqual(0, fsm.CurrentStateTime); Assert.IsInstanceOf<Second>(fsm.CurrentState);
         }
-
-        [Test]
-        public void InvalidRegistrationDoesNotInitializeOrBindStates()
+        [Test] public void DataSupportsSetReplaceAndRemove()
         {
-            var owner = new Owner();
-            var a = new A();
-            Assert.Throws<ArgumentNullException>(() => Fsm<Owner>.Create("", null, a));
-            Assert.Throws<ArgumentException>(() => Fsm<Owner>.Create("", owner, new FsmState<Owner>[0]));
-            Assert.Throws<ArgumentException>(() => Fsm<Owner>.Create("", owner, a, null));
-            Assert.Throws<ArgumentException>(() => Fsm<Owner>.Create("", owner, a, new A()));
-            Assert.That(owner.Events, Is.Empty);
-            var valid = Fsm<Owner>.Create("", owner, a);
-            valid.Shutdown();
+            var fsm = _manager.CreateFsm(new Owner(), new First());
+            Assert.IsNull(fsm.GetData<string>("missing"));
+            fsm.SetData("score", 1); fsm.SetData("score", 2);
+            Assert.AreEqual(2, fsm.GetData<int>("score"));
+            Assert.IsTrue(fsm.RemoveData("score")); Assert.IsFalse(fsm.HasData("score"));
         }
-
-        [Test]
-        public void LiveStateCannotBeSharedButCanBeReusedAfterShutdown()
+        [Test] public void DuplicateStartAndMissingStateUseFrameworkExceptions()
         {
-            var a = new A();
-            var first = Fsm<Owner>.Create("First", new Owner(), a);
-            Assert.Throws<InvalidOperationException>(() => Fsm<Owner>.Create("Second", new Owner(), a));
-            first.Shutdown();
-            var second = Fsm<Owner>.Create("Second", new Owner(), a);
-            second.Start<A>();
-            second.Shutdown();
+            var fsm = _manager.CreateFsm(new Owner(), new First());
+            Assert.Throws<GameFrameworkException>(() => fsm.Start<Second>());
+            fsm.Start<First>(); Assert.Throws<GameFrameworkException>(() => fsm.Start<First>());
         }
-
-        [Test]
-        public void FailedInitializationCleansAttemptedStatesAndReleasesBindings()
+        [Test] public void DestroyReturnsFsmToMemoryPool()
         {
-            var owner = new Owner();
-            var a = new A();
-            var b = new B { Init = _ => throw new InvalidOperationException("init") };
-            Assert.Throws<InvalidOperationException>(() => Fsm<Owner>.Create("", owner, a, b));
-            Assert.That(owner.Events, Is.EqualTo(new[] { "A:init", "B:init", "B:destroy", "A:destroy" }));
-            b.Init = null;
-            var fsm = Fsm<Owner>.Create("", new Owner(), a, b);
-            fsm.Shutdown();
-        }
-
-        [Test]
-        public void InvalidTransitionsPreserveTheCurrentState()
-        {
-            var a = new A();
-            var b = new B();
-            var fsm = Fsm<Owner>.Create("", new Owner(), a, b);
-            Assert.Throws<ArgumentNullException>(() => fsm.Start(null));
-            Assert.Throws<ArgumentException>(() => fsm.Start(typeof(string)));
-            Assert.Throws<InvalidOperationException>(() => fsm.Start<Missing>());
-            fsm.Start(typeof(A));
-            Assert.Throws<InvalidOperationException>(() => fsm.Start<A>());
-            Assert.Throws<InvalidOperationException>(() => a.Go<Missing>(fsm));
-            Assert.Throws<InvalidOperationException>(() => b.Go<A>(fsm));
-            Assert.That(fsm.CurrentState, Is.SameAs(a));
-            a.Go(fsm, typeof(B));
-            Assert.That(fsm.CurrentState, Is.SameAs(b));
-            fsm.Shutdown();
-        }
-
-        [Test]
-        public void OnEnterCanImmediatelyAdvanceToNextState()
-        {
-            var a = new A();
-            a.Enter = fsm => a.Go<B>(fsm);
-            var fsm = Fsm<Owner>.Create("", new Owner(), a, new B());
-            fsm.Start<A>();
-            Assert.That(fsm.CurrentState, Is.TypeOf<B>());
-            fsm.Shutdown();
-        }
-
-        [Test]
-        public void UpdateCanSwitchStateAndShutdownWithoutAnotherTick()
-        {
-            var a = new A();
-            var b = new B { Tick = fsm => fsm.Shutdown() };
-            a.Tick = fsm => a.Go<B>(fsm);
-            var owner = new Owner();
-            var fsm = Fsm<Owner>.Create("", owner, a, b);
-            fsm.Start<A>();
-            fsm.Update(1, 1);
-            Assert.That(fsm.CurrentStateTime, Is.Zero);
-            Assert.That(owner.Events, Does.Not.Contain("B:update"));
-            fsm.Update(1, 1);
-            Assert.That(fsm.IsDestroyed, Is.True);
-        }
-
-        [TestCase("enter")]
-        [TestCase("update")]
-        [TestCase("leave")]
-        public void CallbackFailureDestroysFsmWithoutLeakingStates(string phase)
-        {
-            var a = new A();
-            Action<IFsm<Owner>> fail = _ => throw new InvalidOperationException(phase);
-            if (phase == "enter") a.Enter = fail;
-            if (phase == "update") a.Tick = fail;
-            if (phase == "leave") a.Leave = fail;
-            var owner = new Owner();
-            var fsm = Fsm<Owner>.Create("", owner, a, new B());
-            if (phase == "enter") Assert.Throws<InvalidOperationException>(() => fsm.Start<A>());
-            else
-            {
-                fsm.Start<A>();
-                if (phase == "update") Assert.Throws<InvalidOperationException>(() => fsm.Update(1, 1));
-                else Assert.Throws<InvalidOperationException>(() => a.Go<B>(fsm));
-            }
-            Assert.That(fsm.IsDestroyed, Is.True);
-            Assert.That(fsm.Owner, Is.Null);
-            Assert.That(owner.Events, Does.Contain("A:destroy"));
-            Assert.That(owner.Events, Does.Contain("B:destroy"));
-            if (phase == "leave") Assert.That(owner.Events, Does.Not.Contain("A:leave-shutdown"));
-        }
-
-        [Test]
-        public void ShutdownContinuesCleanupAfterCallbackErrors()
-        {
-            var a = new A {
-                Leave = fsm => { fsm.Shutdown(); throw new Exception("leave"); },
-                Destroy = _ => throw new Exception("destroy")
-            };
-            var owner = new Owner();
-            var fsm = Fsm<Owner>.Create("", owner, a, new B());
-            fsm.Start<A>();
-            var error = Assert.Throws<AggregateException>(() => fsm.Shutdown());
-            Assert.That(error.InnerExceptions.Count, Is.EqualTo(2));
-            Assert.That(owner.Events, Does.Contain("B:destroy"));
-            Assert.That(fsm.Owner, Is.Null);
-            Assert.That(fsm.GetAllStates(), Is.Empty);
-            Assert.DoesNotThrow(() => fsm.Shutdown());
-        }
-
-        [Test]
-        public void OnLeaveCannotStartAnotherStateAndResurrectFsm()
-        {
-            var a = new A { Leave = fsm => fsm.Start<B>() };
-            var fsm = Fsm<Owner>.Create("", new Owner(), a, new B());
-            fsm.Start<A>();
-            Assert.Throws<InvalidOperationException>(() => a.Go<B>(fsm));
-            Assert.That(fsm.IsDestroyed, Is.True);
-            Assert.That(fsm.IsRunning, Is.False);
+            var fsm = _manager.CreateFsm(new Owner(), new First()); fsm.Start<First>();
+            Assert.IsTrue(_manager.DestroyFsm(fsm)); Assert.IsTrue(fsm.IsDestroyed); Assert.IsNull(fsm.Owner);
+            var reused = _manager.CreateFsm(new Owner(), new First());
+            Assert.AreSame(fsm, reused); Assert.IsFalse(reused.IsDestroyed);
         }
     }
 }

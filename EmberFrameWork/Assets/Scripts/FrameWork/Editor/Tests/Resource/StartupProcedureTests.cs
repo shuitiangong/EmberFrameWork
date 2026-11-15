@@ -1,3 +1,5 @@
+using System.Collections;
+using UnityEngine.TestTools;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,7 +28,7 @@ namespace EmberFrameWork.Tests
         private ResourceModule _resource;
         private IProcedureModule _procedures;
         private ProcedureBase _init;
-        private static Type ProcedureType(string name) => ProcedureSetting.ResolveProcedureType("Procedure." + name + ", Assembly-CSharp");
+        private static Type ProcedureType(string name) => Utility.Assembly.GetType("Procedure." + name + ", Assembly-CSharp");
         private static ProcedureBase Create(string name) => (ProcedureBase)Activator.CreateInstance(ProcedureType(name));
         private bool Retry() => (bool)_init.GetType().GetMethod("Retry").Invoke(_init, null);
         private string Error => (string)_init.GetType().GetProperty("LastError").GetValue(_init);
@@ -48,10 +50,11 @@ namespace EmberFrameWork.Tests
         [TearDown] public void TearDown()
         {
             try { ModuleSystem.Shutdown(); }
-            finally { GameFrameworkLog.ResetLogHelper(); }
+            finally { GameFrameworkLog.SetLogHelper(new DefaultLogHelper()); }
         }
 
-        [Test] public async Task StartupWaitsForResourceReadiness()
+        [UnityTest] public IEnumerator StartupWaitsForResourceReadiness() => ResourceTestTask.Wait(StartupWaitsForResourceReadinessAsync());
+        private async Task StartupWaitsForResourceReadinessAsync()
         {
             Assert.AreEqual("ProcedureLaunch", _procedures.CurrentProcedure.GetType().Name);
             ModuleSystem.Update(0, 0);
@@ -68,7 +71,8 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(1, _backend.Starts);
         }
 
-        [Test] public async Task FailureStaysInInitializationAndRetryCanRecover()
+        [UnityTest] public IEnumerator FailureStaysInInitializationAndRetryCanRecover() => ResourceTestTask.Wait(FailureStaysInInitializationAndRetryCanRecoverAsync());
+        private async Task FailureStaysInInitializationAndRetryCanRecoverAsync()
         {
             ModuleSystem.Update(0, 0);
             var pending = Pending;
@@ -87,15 +91,16 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(2, _backend.Starts);
         }
 
-        [Test] public async Task ShutdownPreventsLateCompletionFromEnteringGame()
+        [UnityTest] public IEnumerator ShutdownPreventsLateCompletionFromEnteringGame() => ResourceTestTask.Wait(ShutdownPreventsLateCompletionFromEnteringGameAsync());
+        private async Task ShutdownPreventsLateCompletionFromEnteringGameAsync()
         {
             ModuleSystem.Update(0, 0);
             var pending = Pending;
             ModuleSystem.Shutdown();
             _backend.Gate.SetResult(true);
             try { await pending; Assert.Fail("Expected cancellation"); } catch (OperationCanceledException) { }
-            Assert.AreEqual(0, ModuleSystem.Count);
-            Assert.IsFalse(_procedures.IsInitialized);
+            Assert.AreEqual(ResourceInitializationState.Shutdown, _resource.InitializationState);
+            Assert.Throws<GameFrameworkException>(() => { var ignored = _procedures.CurrentProcedure; });
             Assert.IsFalse(Retry());
         }
 

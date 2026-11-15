@@ -1,3 +1,5 @@
+using System.Collections;
+using UnityEngine.TestTools;
 using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
@@ -57,10 +59,11 @@ namespace EmberFrameWork.Tests
         [TearDown] public void TearDown()
         {
             try { _module.Shutdown(); ModuleSystem.Shutdown(); }
-            finally { MemoryPool.ClearAll(); MemoryPool.EnableStrictCheck = _strict; GameFrameworkLog.ResetLogHelper(); }
+            finally { MemoryPool.ClearAll(); MemoryPool.EnableStrictCheck = _strict; GameFrameworkLog.SetLogHelper(new DefaultLogHelper()); }
         }
 
-        [Test] public async Task CacheHitSharesHandleAndWaitsForLastReturn()
+        [UnityTest] public IEnumerator CacheHitSharesHandleAndWaitsForLastReturn() => ResourceTestTask.Wait(CacheHitSharesHandleAndWaitsForLastReturnAsync());
+        private async Task CacheHitSharesHandleAndWaitsForLastReturnAsync()
         {
             await _module.InitPackage();
             var first = _module.LoadAsset<UnityEngine.TextAsset>("config");
@@ -74,7 +77,8 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(2, _backend.Handles.Count);
         }
 
-        [Test] public async Task ConcurrentLoadsMergeCacheAndReleaseDuplicateHandle()
+        [UnityTest] public IEnumerator ConcurrentLoadsMergeCacheAndReleaseDuplicateHandle() => ResourceTestTask.Wait(ConcurrentLoadsMergeCacheAndReleaseDuplicateHandleAsync());
+        private async Task ConcurrentLoadsMergeCacheAndReleaseDuplicateHandleAsync()
         {
             await _module.InitPackage(); _backend.Wait = true;
             var first = _module.LoadAssetAsync<UnityEngine.TextAsset>("config").AsTask();
@@ -88,7 +92,8 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(1, _backend.Handles[0].Releases);
         }
 
-        [Test] public async Task AliasAndTypeQueriesShareOneCachedAsset()
+        [UnityTest] public IEnumerator AliasAndTypeQueriesShareOneCachedAsset() => ResourceTestTask.Wait(AliasAndTypeQueriesShareOneCachedAssetAsync());
+        private async Task AliasAndTypeQueriesShareOneCachedAssetAsync()
         {
             await _module.InitPackage();
             var asset = _module.LoadAsset<UnityEngine.TextAsset>("short-name");
@@ -102,7 +107,8 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(3, _backend.Handles.Count);
         }
 
-        [Test] public async Task CancelOneWaiterDoesNotCancelOtherRequest()
+        [UnityTest] public IEnumerator CancelOneWaiterDoesNotCancelOtherRequest() => ResourceTestTask.Wait(CancelOneWaiterDoesNotCancelOtherRequestAsync());
+        private async Task CancelOneWaiterDoesNotCancelOtherRequestAsync()
         {
             await _module.InitPackage(); _backend.Wait = true;
             using var cancellation = new CancellationTokenSource();
@@ -116,7 +122,8 @@ namespace EmberFrameWork.Tests
             Assert.AreSame(_backend.Value, await second);
         }
 
-        [Test] public async Task FailureAndWrongTypeReleaseHandlesAndAllowRetry()
+        [UnityTest] public IEnumerator FailureAndWrongTypeReleaseHandlesAndAllowRetry() => ResourceTestTask.Wait(FailureAndWrongTypeReleaseHandlesAndAllowRetryAsync());
+        private async Task FailureAndWrongTypeReleaseHandlesAndAllowRetryAsync()
         {
             await _module.InitPackage(); _backend.Fail = true;
             Assert.Throws<InvalidOperationException>(() => _module.LoadAsset<UnityEngine.TextAsset>("bad"));
@@ -127,7 +134,8 @@ namespace EmberFrameWork.Tests
             Assert.AreSame(_backend.Value, _module.LoadAsset<UnityEngine.TextAsset>("bad"));
         }
 
-        [Test] public async Task PreCancelledAndInvalidCallsDoNotStartLoads()
+        [UnityTest] public IEnumerator PreCancelledAndInvalidCallsDoNotStartLoads() => ResourceTestTask.Wait(PreCancelledAndInvalidCallsDoNotStartLoadsAsync());
+        private async Task PreCancelledAndInvalidCallsDoNotStartLoadsAsync()
         {
             Assert.Throws<InvalidOperationException>(() => _module.LoadAsset<Object>("a"));
             await _module.InitPackage();
@@ -138,17 +146,20 @@ namespace EmberFrameWork.Tests
             Assert.IsEmpty(_backend.Handles);
         }
 
-        [Test] public async Task DoubleReturnDoesNotMakeCachedAssetReleasableEarly()
+        [UnityTest] public IEnumerator DoubleReturnPreservesUnderlyingPoolCounterBehavior() => ResourceTestTask.Wait(DoubleReturnPreservesUnderlyingPoolCounterBehaviorAsync());
+        private async Task DoubleReturnPreservesUnderlyingPoolCounterBehaviorAsync()
         {
             await _module.InitPackage(); var asset = _module.LoadAsset<Object>("a");
             _module.UnloadAsset(asset);
             Assert.Throws<GameFrameworkException>(() => _module.UnloadAsset(asset));
             Assert.AreSame(asset, _module.LoadAsset<Object>("a"));
             await _module.UnloadUnusedAssetsAsync();
-            Assert.AreEqual(0, _backend.Handles[0].Releases);
+            // 原版 Unspawn 在计数减为 -1 后才抛错；再次 Spawn 后计数为 0。
+            Assert.AreEqual(1, _backend.Handles[0].Releases);
         }
 
-        [Test] public async Task ShutdownReleasesCachedAndPendingHandlesBeforeBackend()
+        [UnityTest] public IEnumerator ShutdownReleasesCachedAndPendingHandlesBeforeBackend() => ResourceTestTask.Wait(ShutdownReleasesCachedAndPendingHandlesBeforeBackendAsync());
+        private async Task ShutdownReleasesCachedAndPendingHandlesBeforeBackendAsync()
         {
             await _module.InitPackage(); _module.LoadAsset<Object>("cached"); _backend.Wait = true;
             var pending = _module.LoadAssetAsync<Object>("pending").AsTask();
@@ -159,7 +170,8 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(0, ModuleSystem.GetModule<IObjectPoolModule>().Count);
         }
 
-        [Test] public async Task PoolExpiryEvictsModuleLookupAsWellAsHandle()
+        [UnityTest] public IEnumerator PoolExpiryEvictsModuleLookupAsWellAsHandle() => ResourceTestTask.Wait(PoolExpiryEvictsModuleLookupAsWellAsHandleAsync());
+        private async Task PoolExpiryEvictsModuleLookupAsWellAsHandleAsync()
         {
             _module.Shutdown(); _backend = new Backend(); _module = new ResourceModule(_backend);
             _module.Configure(new ResourceOptions { AssetAutoReleaseInterval = 0, AssetExpireTime = 0 });
@@ -171,7 +183,8 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(2, _backend.Handles.Count);
         }
 
-        [Test] public async Task ZeroCapacityReleasesOnLastReturn()
+        [UnityTest] public IEnumerator ZeroCapacityReleasesOnLastReturn() => ResourceTestTask.Wait(ZeroCapacityReleasesOnLastReturnAsync());
+        private async Task ZeroCapacityReleasesOnLastReturnAsync()
         {
             _module.Shutdown(); _backend = new Backend(); _module = new ResourceModule(_backend);
             _module.Configure(new ResourceOptions { AssetCapacity = 0 });
@@ -182,7 +195,8 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(1, _backend.Handles[0].Releases);
         }
 
-        [Test] public async Task LateCompletionUsesExistingLocationCache()
+        [UnityTest] public IEnumerator LateCompletionUsesExistingLocationCache() => ResourceTestTask.Wait(LateCompletionUsesExistingLocationCacheAsync());
+        private async Task LateCompletionUsesExistingLocationCacheAsync()
         {
             await _module.InitPackage(); _backend.Wait = true;
             var first = _module.LoadAssetAsync<Object>("a").AsTask();

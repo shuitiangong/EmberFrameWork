@@ -30,7 +30,7 @@ namespace EmberFrameWork.Tests
         [TearDown] public void TearDown()
         {
             try { ModuleSystem.Shutdown(); }
-            finally { MemoryPool.ClearAll(); MemoryPool.EnableStrictCheck = _strict; GameFrameworkLog.ResetLogHelper(); }
+            finally { MemoryPool.ClearAll(); MemoryPool.EnableStrictCheck = _strict; GameFrameworkLog.SetLogHelper(new DefaultLogHelper()); }
         }
         private static Item Make(string name = "asset", bool pooled = true, object target = null)
         {
@@ -46,7 +46,6 @@ namespace EmberFrameWork.Tests
             Assert.IsNull(pool.Spawn("asset"));
             Assert.IsNull(pool.Spawn("missing"));
             pool.Unspawn(item);
-            Assert.Throws<GameFrameworkException>(() => pool.Unspawn(item));
             Assert.AreEqual(0, ((ObjectPoolBase)pool).GetAllObjectInfos()[0].SpawnCount);
             Assert.AreSame(item, pool.Spawn("asset"));
         }
@@ -62,17 +61,14 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(0, MemoryPool.GetAllMemoryPoolInfos().Single(x => x.Type == typeof(Item)).UsingMemoryCount);
         }
 
-        [Test] public void DuplicateAndCrossPoolRegistrationLeaveCollectionsUnchanged()
+        [Test] public void DuplicateRegistrationPreservesOriginalMutationOrder()
         {
-            var a = _module.CreateSingleSpawnObjectPool<Item>("a");
-            var b = _module.CreateSingleSpawnObjectPool<Item>("b");
-            var item = Make(); a.Register(item, false);
-            Assert.Throws<GameFrameworkException>(() => a.Register(item, false));
-            Assert.Throws<GameFrameworkException>(() => b.Register(item, false));
-            var duplicate = Make(target: item.Target);
-            Assert.Throws<GameFrameworkException>(() => a.Register(duplicate, false));
-            MemoryPool.Release(duplicate);
-            Assert.AreEqual(1, a.Count); Assert.AreEqual(0, b.Count);
+            var pool = _module.CreateSingleSpawnObjectPool<Item>();
+            var item = Make(); pool.Register(item, false);
+            Assert.Throws<ArgumentException>(() => pool.Register(item, false));
+            Assert.AreEqual(1, pool.Count);
+            // 原版先写名称索引，再写 Target 字典；重复注册异常不会回滚前一项。
+            Assert.AreEqual(2, ((ObjectPoolBase)pool).GetAllObjectInfos().Length);
         }
 
         [Test] public void LocksAndCustomFlagsProtectUnusedObjects()
@@ -105,37 +101,46 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(0, pool.Count);
         }
 
-        [Test] public void FailedSpawnAndUnspawnDoNotCorruptCounts()
+        [Test] public void CallbackFailurePreservesOriginalSpawnCounterOrder()
         {
             var pool = _module.CreateSingleSpawnObjectPool<Item>(); var item = Make();
+            pool.Register(item, false);
             item.FailSpawn = true;
-            Assert.Throws<InvalidOperationException>(() => pool.Register(item, true));
-            Assert.AreEqual(0, pool.Count);
-            item.FailSpawn = false; pool.Register(item, false);
-            item.FailSpawn = true; Assert.Throws<InvalidOperationException>(() => pool.Spawn("asset"));
-            Assert.AreEqual(0, ((ObjectPoolBase)pool).GetAllObjectInfos()[0].SpawnCount);
-            item.FailSpawn = false; pool.Spawn("asset");
-            item.FailUnspawn = true; Assert.Throws<InvalidOperationException>(() => pool.Unspawn(item));
+            Assert.Throws<InvalidOperationException>(() => pool.Spawn("asset"));
             Assert.AreEqual(1, ((ObjectPoolBase)pool).GetAllObjectInfos()[0].SpawnCount);
+            item.FailSpawn = false;
+            item.FailUnspawn = true;
+            Assert.Throws<InvalidOperationException>(() => pool.Unspawn(item));
+            Assert.AreEqual(1, ((ObjectPoolBase)pool).GetAllObjectInfos()[0].SpawnCount);
+            item.FailUnspawn = false;
+            pool.Unspawn(item);
+            Assert.Throws<GameFrameworkException>(() => pool.Unspawn(item));
+            Assert.AreEqual(-1, ((ObjectPoolBase)pool).GetAllObjectInfos()[0].SpawnCount);
         }
 
-        [Test] public void ShutdownCleansOtherPoolsEvenIfReleaseThrows()
+        [Test] public void ShutdownStopsAtReleaseExceptionAsInOriginal()
         {
-            var a = _module.CreateSingleSpawnObjectPool<Item>("a");
-            var b = _module.CreateMultiSpawnObjectPool<Item>("b");
-            var bad = Make(); bad.FailRelease = true;
-            var good = Make(); a.Register(bad, true); b.Register(good, true);
-            Assert.Throws<AggregateException>(() => ModuleSystem.Shutdown());
-            CollectionAssert.Contains(good.Events, "shutdown");
+            var pool = _module.CreateSingleSpawnObjectPool<Item>();
+            var item = Make(); item.FailRelease = true;
+            pool.Register(item, true);
+            Assert.Throws<InvalidOperationException>(() => ((Module)_module).Shutdown());
+            Assert.AreEqual(1, _module.Count);
+            Assert.AreEqual(1, pool.Count);
+            item.FailRelease = false;
+            ((Module)_module).Shutdown();
             Assert.AreEqual(0, _module.Count);
             Assert.AreEqual(0, MemoryPool.GetAllMemoryPoolInfos().Sum(x => x.UsingMemoryCount));
-            Assert.Throws<ObjectDisposedException>(() => a.Register(Make(pooled: false), false));
         }
 
-        [Test] public void DirectlyConstructedWrappersAreClearedWithoutInvalidMemoryReturn()
+        [Test] public void DirectlyConstructedWrappersAreReturnedToMemoryPool()
         {
             var pool = _module.CreateSingleSpawnObjectPool<Item>(); var item = Make(pooled: false);
-            pool.Register(item, false); Assert.IsTrue(pool.ReleaseObject(item)); Assert.IsNull(item.Target);
+            pool.Register(item, false);
+            Assert.IsTrue(pool.ReleaseObject(item));
+            Assert.IsNull(item.Target);
+            var info = MemoryPool.GetAllMemoryPoolInfos().Single(x => x.Type == typeof(Item));
+            Assert.AreEqual(1, info.UnusedMemoryCount);
+            Assert.AreEqual(-1, info.UsingMemoryCount);
         }
 
         [Test] public void RuntimeTypeFactoryAndDestroyWork()

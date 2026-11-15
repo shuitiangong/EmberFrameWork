@@ -5,141 +5,204 @@ using System.Collections.Generic;
 namespace EmberFrameWork
 {
     /// <summary>
-    /// 按实际类型复用托管对象。所有操作串行化；对象借出后由调用者管理线程安全。
-    /// 构造及生命周期回调在锁内执行，不能等待其他线程的内存池操作。
+    /// 内存池。
     /// </summary>
     public static partial class MemoryPool
     {
-        private static readonly object Sync = new object();
-        private static readonly Dictionary<Type, MemoryCollection> Collections = new Dictionary<Type, MemoryCollection>();
-        private static int _callbackDepth;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        private static bool _enableStrictCheck = true;
-#else
-        private static bool _enableStrictCheck;
-#endif
-        /// <summary>启用时，重复、外来或已被 ClearAll 作废的归还会抛异常；禁用时忽略这些归还。</summary>
+        private static readonly Dictionary<Type, MemoryCollection> _memoryCollections = new Dictionary<Type, MemoryCollection>();
+        private static bool _enableStrictCheck = false;
+
+        /// <summary>
+        /// 获取或设置是否开启强制检查。
+        /// </summary>
         public static bool EnableStrictCheck
         {
-            get { lock (Sync) return _enableStrictCheck; }
-            set { lock (Sync) _enableStrictCheck = value; }
+            get => _enableStrictCheck;
+            set => _enableStrictCheck = value;
         }
 
-        public static int Count { get { lock (Sync) return Collections.Count; } }
+        /// <summary>
+        /// 获取内存池的数量。
+        /// </summary>
+        // ReSharper disable once InconsistentlySynchronizedField
+        public static int Count => _memoryCollections.Count;
 
-        internal static bool IsAcquired(IMemory memory)
-        {
-            lock (Sync) return memory != null && Collections.TryGetValue(memory.GetType(), out var collection) && collection.CanRelease(memory);
-        }
-
-        /// <summary>开始新运行会话时清除旧池并恢复默认检查策略。</summary>
-        public static void Reset()
-        {
-            lock (Sync)
-            {
-                ClearAll();
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                _enableStrictCheck = true;
-#else
-                _enableStrictCheck = false;
-#endif
-            }
-        }
-
-        public static T Acquire<T>() where T : class, IMemory, new()
-        {
-            lock (Sync) return GetCollection(typeof(T)).Acquire<T>();
-        }
-
-        public static IMemory Acquire(Type memoryType)
-        {
-            ValidateType(memoryType, true);
-            lock (Sync) return GetCollection(memoryType).Acquire();
-        }
-
-        public static void Release(IMemory memory)
-        {
-            if (memory == null) throw new ArgumentNullException(nameof(memory));
-            lock (Sync)
-            {
-                if (TryGetLoan(memory, out var collection)) collection.Release(memory, false);
-            }
-        }
-
-        public static void Add<T>(int count) where T : class, IMemory, new()
-        {
-            ValidateCount(count);
-            lock (Sync) GetCollection(typeof(T)).Add<T>(count);
-        }
-
-        public static void Add(Type memoryType, int count)
-        {
-            ValidateType(memoryType, true);
-            ValidateCount(count);
-            lock (Sync) GetCollection(memoryType).Add(count);
-        }
-
-        public static void Remove<T>(int count) where T : class, IMemory => Remove(typeof(T), count);
-        public static void Remove(Type memoryType, int count)
-        {
-            ValidateType(memoryType, false);
-            ValidateCount(count);
-            lock (Sync) { if (Collections.TryGetValue(memoryType, out var collection)) collection.Remove(count); }
-        }
-
-        public static void RemoveAll<T>() where T : class, IMemory => RemoveAll(typeof(T));
-        public static void RemoveAll(Type memoryType) => Remove(memoryType, int.MaxValue);
-
-        /// <summary>清除空闲缓存及统计，不调用借出对象的 Clear；旧借用不能再归还。应在模块关闭后调用。</summary>
-        public static void ClearAll()
-        {
-            lock (Sync)
-            {
-                if (_callbackDepth != 0) throw new InvalidOperationException("Cannot clear pools inside a pool callback.");
-                Collections.Clear();
-            }
-        }
-
+        /// <summary>
+        /// 获取所有内存池的信息。
+        /// </summary>
+        /// <returns>所有内存池的信息。</returns>
         public static MemoryPoolInfo[] GetAllMemoryPoolInfos()
         {
-            lock (Sync)
+            int index = 0;
+            MemoryPoolInfo[] results = null;
+
+            lock (_memoryCollections)
             {
-                var result = new MemoryPoolInfo[Collections.Count];
-                int index = 0;
-                foreach (var collection in Collections.Values) result[index++] = collection.GetInfo();
-                return result;
+                results = new MemoryPoolInfo[_memoryCollections.Count];
+                foreach (KeyValuePair<Type, MemoryCollection> memoryCollection in _memoryCollections)
+                {
+                    results[index++] = new MemoryPoolInfo(memoryCollection.Key, memoryCollection.Value.UnusedMemoryCount, memoryCollection.Value.UsingMemoryCount, memoryCollection.Value.AcquireMemoryCount, memoryCollection.Value.ReleaseMemoryCount, memoryCollection.Value.AddMemoryCount, memoryCollection.Value.RemoveMemoryCount);
+                }
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// 清除所有内存池。
+        /// </summary>
+        public static void ClearAll()
+        {
+            lock (_memoryCollections)
+            {
+                foreach (KeyValuePair<Type, MemoryCollection> memoryCollection in _memoryCollections)
+                {
+                    memoryCollection.Value.RemoveAll();
+                }
+
+                _memoryCollections.Clear();
             }
         }
 
-        private static MemoryCollection GetCollection(Type type)
+        /// <summary>
+        /// 从内存池获取内存对象。
+        /// </summary>
+        /// <typeparam name="T">内存对象类型。</typeparam>
+        /// <returns>内存对象。</returns>
+        public static T Acquire<T>() where T : class, IMemory, new()
         {
-            if (!Collections.TryGetValue(type, out var collection))
+            return GetMemoryCollection(typeof(T)).Acquire<T>();
+        }
+
+        /// <summary>
+        /// 从内存池获取内存对象。
+        /// </summary>
+        /// <param name="memoryType">内存对象类型。</param>
+        /// <returns>内存对象。</returns>
+        public static IMemory Acquire(Type memoryType)
+        {
+            InternalCheckMemoryType(memoryType);
+            return GetMemoryCollection(memoryType).Acquire();
+        }
+
+        /// <summary>
+        /// 将内存对象归还内存池。
+        /// </summary>
+        /// <param name="memory">内存对象。</param>
+        public static void Release(IMemory memory)
+        {
+            if (memory == null)
             {
-                collection = new MemoryCollection(type);
-                Collections.Add(type, collection);
+                throw new Exception("Memory is invalid.");
             }
-            return collection;
+
+            Type memoryType = memory.GetType();
+            InternalCheckMemoryType(memoryType);
+            GetMemoryCollection(memoryType).Release(memory);
         }
 
-        private static bool TryGetLoan(IMemory memory, out MemoryCollection collection)
+        /// <summary>
+        /// 向内存池中追加指定数量的内存对象。
+        /// </summary>
+        /// <typeparam name="T">内存对象类型。</typeparam>
+        /// <param name="count">追加数量。</param>
+        public static void Add<T>(int count) where T : class, IMemory, new()
         {
-            if (Collections.TryGetValue(memory.GetType(), out collection) && collection.CanRelease(memory)) return true;
-            if (_enableStrictCheck) throw new GameFrameworkException("Object was not acquired from this pool, was already returned, or its pool was cleared.");
-            return false;
+            GetMemoryCollection(typeof(T)).Add<T>(count);
         }
 
-        private static void ValidateCount(int count)
+        /// <summary>
+        /// 向内存池中追加指定数量的内存对象。
+        /// </summary>
+        /// <param name="memoryType">内存对象类型。</param>
+        /// <param name="count">追加数量。</param>
+        public static void Add(Type memoryType, int count)
         {
-            if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+            InternalCheckMemoryType(memoryType);
+            GetMemoryCollection(memoryType).Add(count);
         }
 
-        private static void ValidateType(Type type, bool requireConstructor)
+        /// <summary>
+        /// 从内存池中移除指定数量的内存对象。
+        /// </summary>
+        /// <typeparam name="T">内存对象类型。</typeparam>
+        /// <param name="count">移除数量。</param>
+        public static void Remove<T>(int count) where T : class, IMemory
         {
-            if (type == null) throw new ArgumentNullException(nameof(type));
-            if (!type.IsClass || type.IsAbstract || type.ContainsGenericParameters || !typeof(IMemory).IsAssignableFrom(type))
-                throw new ArgumentException("Expected a concrete IMemory class.", nameof(type));
-            if (requireConstructor && type.GetConstructor(Type.EmptyTypes) == null)
-                throw new ArgumentException("Expected a public parameterless constructor.", nameof(type));
+            GetMemoryCollection(typeof(T)).Remove(count);
+        }
+
+        /// <summary>
+        /// 从内存池中移除指定数量的内存对象。
+        /// </summary>
+        /// <param name="memoryType">内存对象类型。</param>
+        /// <param name="count">移除数量。</param>
+        public static void Remove(Type memoryType, int count)
+        {
+            InternalCheckMemoryType(memoryType);
+            GetMemoryCollection(memoryType).Remove(count);
+        }
+
+        /// <summary>
+        /// 从内存池中移除所有的内存对象。
+        /// </summary>
+        /// <typeparam name="T">内存对象类型。</typeparam>
+        public static void RemoveAll<T>() where T : class, IMemory
+        {
+            GetMemoryCollection(typeof(T)).RemoveAll();
+        }
+
+        /// <summary>
+        /// 从内存池中移除所有的内存对象。
+        /// </summary>
+        /// <param name="memoryType">内存对象类型。</param>
+        public static void RemoveAll(Type memoryType)
+        {
+            InternalCheckMemoryType(memoryType);
+            GetMemoryCollection(memoryType).RemoveAll();
+        }
+
+        private static void InternalCheckMemoryType(Type memoryType)
+        {
+            if (!_enableStrictCheck)
+            {
+                return;
+            }
+
+            if (memoryType == null)
+            {
+                throw new Exception("Memory type is invalid.");
+            }
+
+            if (!memoryType.IsClass || memoryType.IsAbstract)
+            {
+                throw new Exception("Memory type is not a non-abstract class type.");
+            }
+
+            if (!typeof(IMemory).IsAssignableFrom(memoryType))
+            {
+                throw new Exception(string.Format("Memory type '{0}' is invalid.", memoryType.FullName));
+            }
+        }
+
+        private static MemoryCollection GetMemoryCollection(Type memoryType)
+        {
+            if (memoryType == null)
+            {
+                throw new Exception("MemoryType is invalid.");
+            }
+
+            MemoryCollection memoryCollection = null;
+            lock (_memoryCollections)
+            {
+                if (!_memoryCollections.TryGetValue(memoryType, out memoryCollection))
+                {
+                    memoryCollection = new MemoryCollection(memoryType);
+                    _memoryCollections.Add(memoryType, memoryCollection);
+                }
+            }
+
+            return memoryCollection;
         }
     }
 }

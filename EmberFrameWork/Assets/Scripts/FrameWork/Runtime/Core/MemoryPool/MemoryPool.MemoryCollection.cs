@@ -1,95 +1,157 @@
 // Adapted from TEngine (Copyright (c) 2022 ALEXTANG, MIT). See ../LICENSE.txt.
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 
 namespace EmberFrameWork
 {
     public static partial class MemoryPool
     {
-        // 使用引用身份，避免对象自定义 Equals/GetHashCode 干扰所有权判断。
-        private sealed class ReferenceComparer : IEqualityComparer<IMemory>
-        {
-            public static readonly ReferenceComparer Instance = new ReferenceComparer();
-            public bool Equals(IMemory x, IMemory y) => ReferenceEquals(x, y);
-            public int GetHashCode(IMemory obj) => RuntimeHelpers.GetHashCode(obj);
-        }
-
-        // 仅在持有 Sync 锁时访问。
+        /// <summary>
+        /// 内存池收集器。
+        /// </summary>
         private sealed class MemoryCollection
         {
-            private readonly Type _type;
-            private readonly Queue<IMemory> _unused = new Queue<IMemory>();
-            private readonly HashSet<IMemory> _using = new HashSet<IMemory>(ReferenceComparer.Instance);
-            private readonly HashSet<IMemory> _returning = new HashSet<IMemory>(ReferenceComparer.Instance);
-            private int _acquired, _released, _added, _removed;
+            private readonly Queue<IMemory> _memories;
+            private readonly Type _memoryType;
+            private int _usingMemoryCount;
+            private int _acquireMemoryCount;
+            private int _releaseMemoryCount;
+            private int _addMemoryCount;
+            private int _removeMemoryCount;
 
-            public MemoryCollection(Type type) { _type = type; }
-
-            private T Create<T>() where T : class, IMemory, new()
+            public MemoryCollection(Type memoryType)
             {
-                _callbackDepth++;
-                try { var memory = new T(); _added++; return memory; }
-                finally { _callbackDepth--; }
+                _memories = new Queue<IMemory>();
+                _memoryType = memoryType;
+                _usingMemoryCount = 0;
+                _acquireMemoryCount = 0;
+                _releaseMemoryCount = 0;
+                _addMemoryCount = 0;
+                _removeMemoryCount = 0;
             }
 
-            private IMemory Create()
-            {
-                _callbackDepth++;
-                try { var memory = (IMemory)Activator.CreateInstance(_type); _added++; return memory; }
-                finally { _callbackDepth--; }
-            }
+            public Type MemoryType => _memoryType;
+
+            public int UnusedMemoryCount => _memories.Count;
+
+            public int UsingMemoryCount => _usingMemoryCount;
+
+            public int AcquireMemoryCount => _acquireMemoryCount;
+
+            public int ReleaseMemoryCount => _releaseMemoryCount;
+
+            public int AddMemoryCount => _addMemoryCount;
+
+            public int RemoveMemoryCount => _removeMemoryCount;
 
             public T Acquire<T>() where T : class, IMemory, new()
             {
-                var memory = _unused.Count > 0 ? (T)_unused.Dequeue() : Create<T>();
-                _using.Add(memory);
-                _acquired++;
-                return memory;
+                if (typeof(T) != _memoryType)
+                {
+                    throw new Exception("Type is invalid.");
+                }
+
+                _usingMemoryCount++;
+                _acquireMemoryCount++;
+                lock (_memories)
+                {
+                    if (_memories.Count > 0)
+                    {
+                        return (T)_memories.Dequeue();
+                    }
+                }
+
+                _addMemoryCount++;
+                return new T();
             }
 
             public IMemory Acquire()
             {
-                var memory = _unused.Count > 0 ? _unused.Dequeue() : Create();
-                _using.Add(memory);
-                _acquired++;
-                return memory;
-            }
-
-            public bool CanRelease(IMemory memory) => _using.Contains(memory) && !_returning.Contains(memory);
-
-            public void Discard(IMemory memory)
-            {
-                if (_using.Remove(memory)) _removed++;
-            }
-
-            public void Release(IMemory memory, bool recycle)
-            {
-                _returning.Add(memory);
-                _callbackDepth++;
-                try
+                _usingMemoryCount++;
+                _acquireMemoryCount++;
+                lock (_memories)
                 {
-                    if (recycle) ((MemoryObject)memory).RecycleToPool();
-                    memory.Clear();
-                    _using.Remove(memory);
-                    _unused.Enqueue(memory);
-                    _released++;
+                    if (_memories.Count > 0)
+                    {
+                        return _memories.Dequeue();
+                    }
                 }
-                finally { _callbackDepth--; _returning.Remove(memory); }
-                // 回调抛异常时对象仍处于借出状态，修复后可再次归还。
+
+                _addMemoryCount++;
+                return (IMemory)Activator.CreateInstance(_memoryType);
+            }
+
+            public void Release(IMemory memory)
+            {
+                memory.Clear();
+                lock (_memories)
+                {
+                    if (_enableStrictCheck && _memories.Contains(memory))
+                    {
+                        throw new Exception("The memory has been released.");
+                    }
+
+                    _memories.Enqueue(memory);
+                }
+
+                _releaseMemoryCount++;
+                _usingMemoryCount--;
             }
 
             public void Add<T>(int count) where T : class, IMemory, new()
             {
-                while (count-- > 0) _unused.Enqueue(Create<T>());
+                if (typeof(T) != _memoryType)
+                {
+                    throw new Exception("Type is invalid.");
+                }
+
+                lock (_memories)
+                {
+                    _addMemoryCount += count;
+                    while (count-- > 0)
+                    {
+                        _memories.Enqueue(new T());
+                    }
+                }
             }
-            public void Add(int count) { while (count-- > 0) _unused.Enqueue(Create()); }
+
+            public void Add(int count)
+            {
+                lock (_memories)
+                {
+                    _addMemoryCount += count;
+                    while (count-- > 0)
+                    {
+                        _memories.Enqueue((IMemory)Activator.CreateInstance(_memoryType));
+                    }
+                }
+            }
+
             public void Remove(int count)
             {
-                count = Math.Min(count, _unused.Count);
-                while (count-- > 0) { _unused.Dequeue(); _removed++; }
+                lock (_memories)
+                {
+                    if (count > _memories.Count)
+                    {
+                        count = _memories.Count;
+                    }
+
+                    _removeMemoryCount += count;
+                    while (count-- > 0)
+                    {
+                        _memories.Dequeue();
+                    }
+                }
             }
-            public MemoryPoolInfo GetInfo() => new MemoryPoolInfo(_type, _unused.Count, _using.Count, _acquired, _released, _added, _removed);
+
+            public void RemoveAll()
+            {
+                lock (_memories)
+                {
+                    _removeMemoryCount += _memories.Count;
+                    _memories.Clear();
+                }
+            }
         }
     }
 }

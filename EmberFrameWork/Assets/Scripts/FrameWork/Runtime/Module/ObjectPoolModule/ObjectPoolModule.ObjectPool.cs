@@ -23,14 +23,6 @@ namespace EmberFrameWork
             private float _expireTime;
             private int _priority;
             private float _autoReleaseTime;
-            private bool _shutdown;
-            private bool _releasing;
-
-            private sealed class TargetComparer : IEqualityComparer<object>
-            {
-                public new bool Equals(object x, object y) => ReferenceEquals(x, y);
-                public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
-            }
 
             /// <summary>
             /// 初始化对象池的新实例。
@@ -45,12 +37,12 @@ namespace EmberFrameWork
                 : base(name)
             {
                 _objects = new GameFrameworkMultiDictionary<string, Object<T>>();
-                _objectMap = new Dictionary<object, Object<T>>(new TargetComparer());
+                _objectMap = new Dictionary<object, Object<T>>();
                 _defaultReleaseObjectFilterCallback = DefaultReleaseObjectFilterCallback;
                 _cachedCanReleaseObjects = new List<T>();
                 _cachedToReleaseObjects = new List<T>();
                 _allowMultiSpawn = allowMultiSpawn;
-                AutoReleaseInterval = autoReleaseInterval;
+                _autoReleaseInterval = autoReleaseInterval;
                 Capacity = capacity;
                 ExpireTime = expireTime;
                 _priority = priority;
@@ -90,11 +82,7 @@ namespace EmberFrameWork
             public override float AutoReleaseInterval
             {
                 get => _autoReleaseInterval;
-                set
-                {
-                    if (float.IsNaN(value) || float.IsInfinity(value) || value < 0) throw new ArgumentOutOfRangeException(nameof(value));
-                    _autoReleaseInterval = value;
-                }
+                set => _autoReleaseInterval = value;
             }
 
             /// <summary>
@@ -129,7 +117,7 @@ namespace EmberFrameWork
 
                 set
                 {
-                    if (float.IsNaN(value) || float.IsInfinity(value) || value < 0f)
+                    if (value < 0f)
                     {
                         throw new GameFrameworkException("ExpireTime is invalid.");
                     }
@@ -160,19 +148,12 @@ namespace EmberFrameWork
             /// <param name="spawned">对象是否已被获取。</param>
             public void Register(T obj, bool spawned)
             {
-                if (_shutdown) throw new ObjectDisposedException(FullName);
                 if (obj == null)
                 {
                     throw new GameFrameworkException("Object is invalid.");
                 }
 
-                if (obj.Name == null || obj.Target == null || obj.PoolOwner != null || _objectMap.ContainsKey(obj.Target))
-                    throw new GameFrameworkException("Object is uninitialized, already registered, or has a duplicate target.");
-                obj.PoolOwner = this;
-                Object<T> internalObject;
-                try { internalObject = Object<T>.Create(obj, spawned); }
-                catch { obj.PoolOwner = null; throw; }
-                if (_shutdown) { try { internalObject.Release(true); } finally { MemoryPool.Release(internalObject); } throw new ObjectDisposedException(FullName); }
+                Object<T> internalObject = Object<T>.Create(obj, spawned);
                 _objects.Add(obj.Name, internalObject);
                 _objectMap.Add(obj.Target, internalObject);
 
@@ -417,8 +398,8 @@ namespace EmberFrameWork
                 _objects.Remove(internalObject.Name, internalObject);
                 _objectMap.Remove(internalObject.Peek().Target);
 
-                try { internalObject.Release(false); }
-                finally { MemoryPool.Release(internalObject); }
+                internalObject.Release(false);
+                MemoryPool.Release(internalObject);
                 return true;
             }
 
@@ -468,24 +449,21 @@ namespace EmberFrameWork
                 DateTime expireTime = DateTime.MinValue;
                 if (_expireTime < float.MaxValue)
                 {
-                    var now = DateTime.UtcNow;
-                    expireTime = _expireTime >= (now - DateTime.MinValue).TotalSeconds ? DateTime.MinValue : now.AddSeconds(-_expireTime);
+                    expireTime = DateTime.UtcNow.AddSeconds(-_expireTime);
                 }
 
-                if (_shutdown || _releasing) return;
-                _releasing = true;
-                try
+                _autoReleaseTime = 0f;
+                GetCanReleaseObjects(_cachedCanReleaseObjects);
+                List<T> toReleaseObjects = releaseObjectFilterCallback(_cachedCanReleaseObjects, toReleaseCount, expireTime);
+                if (toReleaseObjects == null || toReleaseObjects.Count <= 0)
                 {
-                    _autoReleaseTime = 0f;
-                    GetCanReleaseObjects(_cachedCanReleaseObjects);
-                    var selected = releaseObjectFilterCallback(_cachedCanReleaseObjects, toReleaseCount, expireTime);
-                    if (selected == null || selected.Count == 0) return;
-                    // 筛选结果可能包含重复对象；释放前保存目标，防止 Clear 改写包装对象。
-                    var targets = new List<object>();
-                    foreach (var obj in selected) if (obj != null && obj.PoolOwner == this) targets.Add(obj.Target);
-                    foreach (var target in targets) if (target != null) ReleaseObject(target);
+                    return;
                 }
-                finally { _releasing = false; }
+
+                foreach (T toReleaseObject in toReleaseObjects)
+                {
+                    ReleaseObject(toReleaseObject);
+                }
             }
 
             /// <summary>
@@ -493,7 +471,12 @@ namespace EmberFrameWork
             /// </summary>
             public override void ReleaseAllUnused()
             {
-                Release(int.MaxValue, (candidates, count, expiry) => candidates);
+                _autoReleaseTime = 0f;
+                GetCanReleaseObjects(_cachedCanReleaseObjects);
+                foreach (T toReleaseObject in _cachedCanReleaseObjects)
+                {
+                    ReleaseObject(toReleaseObject);
+                }
             }
 
             /// <summary>
@@ -528,20 +511,16 @@ namespace EmberFrameWork
 
             internal override void Shutdown()
             {
-                if (_shutdown) return;
-                _shutdown = true;
-                var objects = new List<Object<T>>(_objectMap.Values);
+                foreach (KeyValuePair<object, Object<T>> objectInMap in _objectMap)
+                {
+                    objectInMap.Value.Release(true);
+                    MemoryPool.Release(objectInMap.Value);
+                }
+
                 _objects.Clear();
                 _objectMap.Clear();
                 _cachedCanReleaseObjects.Clear();
                 _cachedToReleaseObjects.Clear();
-                List<Exception> errors = null;
-                foreach (var obj in objects)
-                {
-                    try { try { obj.Release(true); } finally { MemoryPool.Release(obj); } }
-                    catch (Exception error) { if (errors == null) errors = new List<Exception>(); errors.Add(error); }
-                }
-                if (errors != null) throw new AggregateException(errors);
             }
 
             private Object<T> GetObject(object target)

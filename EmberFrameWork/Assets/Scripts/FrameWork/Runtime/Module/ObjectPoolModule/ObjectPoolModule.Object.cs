@@ -13,8 +13,6 @@ namespace EmberFrameWork
         {
             private T _object;
             private int _spawnCount;
-            private bool _fromMemoryPool;
-            private bool _inCallback;
 
             /// <summary>
             /// 初始化内部对象的新实例。
@@ -125,12 +123,10 @@ namespace EmberFrameWork
 
                 Object<T> internalObject = MemoryPool.Acquire<Object<T>>();
                 internalObject._object = obj;
-                internalObject._fromMemoryPool = MemoryPool.IsAcquired(obj);
                 internalObject._spawnCount = spawned ? 1 : 0;
                 if (spawned)
                 {
-                    try { obj.OnSpawn(); }
-                    catch { MemoryPool.Release(internalObject); throw; }
+                    obj.OnSpawn();
                 }
 
                 return internalObject;
@@ -143,8 +139,6 @@ namespace EmberFrameWork
             {
                 _object = null;
                 _spawnCount = 0;
-                _fromMemoryPool = false;
-                _inCallback = false;
             }
 
             /// <summary>
@@ -162,13 +156,9 @@ namespace EmberFrameWork
             /// <returns>对象。</returns>
             public T Spawn()
             {
-                if (_inCallback) throw new InvalidOperationException("Recursive object callback.");
                 _spawnCount++;
-                _inCallback = true;
-                try { _object.OnSpawn(); }
-                catch { _spawnCount--; throw; }
-                finally { _inCallback = false; }
                 _object.LastUseTime = DateTime.UtcNow;
+                _object.OnSpawn();
                 return _object;
             }
 
@@ -177,10 +167,7 @@ namespace EmberFrameWork
             /// </summary>
             public void Unspawn()
             {
-                if (_inCallback || _spawnCount <= 0) throw new GameFrameworkException("Object is not spawned or a callback is running.");
-                _inCallback = true;
-                try { _object.OnUnspawn(); }
-                finally { _inCallback = false; }
+                _object.OnUnspawn();
                 _object.LastUseTime = DateTime.UtcNow;
                 _spawnCount--;
                 if (_spawnCount < 0)
@@ -195,13 +182,8 @@ namespace EmberFrameWork
             /// <param name="isShutdown">是否是关闭对象池时触发。</param>
             public void Release(bool isShutdown)
             {
-                try { _object.Release(isShutdown); }
-                finally
-                {
-                    _object.PoolOwner = null;
-                    if (_fromMemoryPool) MemoryPool.Release(_object);
-                    else _object.Clear();
-                }
+                _object.Release(isShutdown);
+                MemoryPool.Release(_object);
             }
         }
     }

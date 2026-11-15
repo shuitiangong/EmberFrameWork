@@ -28,13 +28,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -53,13 +50,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -80,13 +74,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -109,13 +100,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -140,13 +128,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -173,13 +158,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -208,13 +190,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -245,13 +224,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -284,13 +260,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -325,13 +298,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -368,13 +338,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -413,13 +380,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -460,13 +424,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -509,13 +470,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -560,13 +518,10 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15);
+            return s_CachedStringBuilder.ToString();
         }
 
         /// <summary>
@@ -613,32 +568,17 @@ namespace EmberFrameWork
                 throw new GameFrameworkException("Format is invalid.");
             }
 
-            var builder = AcquireBuilder();
-            try
-            {
-                builder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16);
-                return builder.ToString();
-            }
-            finally { ReleaseBuilder(builder); }
+            CheckCachedStringBuilder();
+            s_CachedStringBuilder.Length = 0;
+            s_CachedStringBuilder.AppendFormat(format, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16);
+            return s_CachedStringBuilder.ToString();
         }
 
-        private static StringBuilder AcquireBuilder()
+        private static void CheckCachedStringBuilder()
         {
-            // 借出时移除缓存，ToString 内部再次格式化时使用独立实例。
-            var builder = s_CachedStringBuilder;
-            s_CachedStringBuilder = null;
-            if (builder == null) return new StringBuilder(STRING_BUILDER_CAPACITY);
-            builder.Clear();
-            return builder;
-        }
-
-        private static void ReleaseBuilder(StringBuilder builder)
-        {
-            // 避免一次超长文本使线程永久保留大缓冲区。
-            if (builder.Capacity <= 16 * 1024)
+            if (s_CachedStringBuilder == null)
             {
-                builder.Clear();
-                s_CachedStringBuilder = builder;
+                s_CachedStringBuilder = new StringBuilder(STRING_BUILDER_CAPACITY);
             }
         }
     }

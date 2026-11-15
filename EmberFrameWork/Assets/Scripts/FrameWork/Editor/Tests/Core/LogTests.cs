@@ -27,7 +27,7 @@ namespace EmberFrameWork.Tests
         }
 
         [TearDown]
-        public void TearDown() => GameFrameworkLog.ResetLogHelper();
+        public void TearDown() => GameFrameworkLog.SetLogHelper(new DefaultLogHelper());
 
         [Test]
         public void RoutesAllLevelsToCustomHelper()
@@ -58,21 +58,27 @@ namespace EmberFrameWork.Tests
         }
 
         [Test]
-        public void FatalExceptionPreservesOriginalObject()
+        public void FatalExceptionForwardsFormattedText()
         {
             var original = new InvalidOperationException("original");
             Log.Fatal(original);
-            Assert.AreSame(original, _capture.Messages[0]);
+#if ENABLE_LOG
+            Assert.AreEqual(original.ToString(), _capture.Messages[0]);
             Assert.AreEqual(GameFrameworkLogLevel.Fatal, _capture.Levels[0]);
+#else
+            Assert.IsEmpty(_capture.Messages);
+#endif
         }
 
         [Test]
-        public void DefaultFatalHandlesNullAndKeepsInnerException()
+        public void DefaultFatalPreservesTEngineExceptionBehavior()
         {
             var helper = new DefaultLogHelper();
-            Assert.That(Assert.Throws<Exception>(() => helper.Log(GameFrameworkLogLevel.Fatal, null)).Message, Does.Contain("null"));
+            Assert.Throws<NullReferenceException>(() => helper.Log(GameFrameworkLogLevel.Fatal, null));
             var original = new Exception("original");
-            Assert.AreSame(original, Assert.Throws<Exception>(() => helper.Log(GameFrameworkLogLevel.Fatal, original)).InnerException);
+            var thrown = Assert.Throws<Exception>(() => helper.Log(GameFrameworkLogLevel.Fatal, original));
+            Assert.IsNull(thrown.InnerException);
+            StringAssert.Contains(original.ToString(), thrown.Message);
         }
     }
 }

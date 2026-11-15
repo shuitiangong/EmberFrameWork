@@ -22,7 +22,8 @@ namespace EmberFrameWork.Editor
             _entrance = serializedObject.FindProperty("entranceProcedureTypeName");
             var runtimeAssemblies = new HashSet<string>(CompilationPipeline.GetAssemblies(AssembliesType.Player).Select(a => a.name));
             _types = TypeCache.GetTypesDerivedFrom<ProcedureBase>()
-                .Where(type => ProcedureSetting.IsProcedureType(type) && runtimeAssemblies.Contains(type.Assembly.GetName().Name))
+                .Where(type => type.IsClass && !type.IsAbstract && !type.ContainsGenericParameters &&
+                    type.GetConstructor(Type.EmptyTypes) != null && runtimeAssemblies.Contains(type.Assembly.GetName().Name))
                 .OrderBy(type => type.FullName, StringComparer.Ordinal).ToArray();
         }
 
@@ -76,7 +77,7 @@ namespace EmberFrameWork.Editor
             }
             serializedObject.ApplyModifiedProperties();
             var setting = (ProcedureSetting)target;
-            if (!setting.TryValidate(out var error)) EditorGUILayout.HelpBox(error, MessageType.Warning);
+            if (string.IsNullOrEmpty(_entrance.stringValue)) EditorGUILayout.HelpBox("Entrance procedure is invalid.", MessageType.Warning);
             if (Application.isPlaying)
             {
                 EditorGUILayout.LabelField("当前流程", setting.CurrentProcedure?.GetType().FullName ?? "未运行");

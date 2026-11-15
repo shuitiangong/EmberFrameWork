@@ -16,10 +16,7 @@ namespace EmberFrameWork
         private readonly Dictionary<TypeNamePair, ObjectPoolBase> _objectPools;
         private readonly List<ObjectPoolBase> _cachedAllObjectPools;
         private readonly Comparison<ObjectPoolBase> _objectPoolComparer;
-        private readonly List<ObjectPoolBase> _updatePools = new List<ObjectPoolBase>();
-        private bool _shutdown;
-        private bool _updating;
-        
+
         /// <summary>
         /// 获取游戏框架模块优先级。
         /// </summary>
@@ -38,19 +35,12 @@ namespace EmberFrameWork
         /// <param name="realElapseSeconds">真实流逝时间，以秒为单位。</param>
         public void Update(float elapseSeconds, float realElapseSeconds)
         {
-            if (_shutdown) return;
-            if (_updating) throw new InvalidOperationException("Recursive object pool update.");
-            _updating = true;
-            _updatePools.AddRange(_objectPools.Values);
-            try
+            foreach (KeyValuePair<TypeNamePair, ObjectPoolBase> objectPool in _objectPools)
             {
-                foreach (var pool in _updatePools)
-                    if (_objectPools.TryGetValue(new TypeNamePair(pool.ObjectType, pool.Name), out var current) && ReferenceEquals(current, pool))
-                        pool.Update(elapseSeconds, realElapseSeconds);
+                objectPool.Value.Update(elapseSeconds, realElapseSeconds);
             }
-            finally { _updatePools.Clear(); _updating = false; }
         }
-        
+
         /// <summary>
         /// 初始化对象池管理器的新实例。
         /// </summary>
@@ -71,18 +61,13 @@ namespace EmberFrameWork
         /// </summary>
         public override void Shutdown()
         {
-            if (_shutdown) return;
-            _shutdown = true;
-            var pools = new List<ObjectPoolBase>(_objectPools.Values);
+            foreach (KeyValuePair<TypeNamePair, ObjectPoolBase> objectPool in _objectPools)
+            {
+                objectPool.Value.Shutdown();
+            }
+
             _objectPools.Clear();
             _cachedAllObjectPools.Clear();
-            List<Exception> errors = null;
-            foreach (var pool in pools)
-            {
-                try { pool.Shutdown(); }
-                catch (Exception error) { if (errors == null) errors = new List<Exception>(); errors.Add(error); }
-            }
-            if (errors != null) throw new AggregateException(errors);
         }
 
         /// <summary>
@@ -1217,7 +1202,7 @@ namespace EmberFrameWork
         {
             Log.Info("Object pool release...");
             GetAllObjectPools(true, _cachedAllObjectPools);
-            foreach (ObjectPoolBase objectPool in _cachedAllObjectPools.ToArray())
+            foreach (ObjectPoolBase objectPool in _cachedAllObjectPools)
             {
                 objectPool.Release();
             }
@@ -1230,7 +1215,7 @@ namespace EmberFrameWork
         {
             Log.Info("Object pool release all unused...");
             GetAllObjectPools(true, _cachedAllObjectPools);
-            foreach (ObjectPoolBase objectPool in _cachedAllObjectPools.ToArray())
+            foreach (ObjectPoolBase objectPool in _cachedAllObjectPools)
             {
                 objectPool.ReleaseAllUnused();
             }
@@ -1255,7 +1240,6 @@ namespace EmberFrameWork
         private IObjectPool<T> InternalCreateObjectPool<T>(string name, bool allowMultiSpawn, float autoReleaseInterval, int capacity, float expireTime,
             int priority) where T : ObjectBase
         {
-            if (_shutdown) throw new ObjectDisposedException(nameof(ObjectPoolModule));
             TypeNamePair typeNamePair = new TypeNamePair(typeof(T), name);
             if (HasObjectPool<T>(name))
             {
@@ -1270,7 +1254,6 @@ namespace EmberFrameWork
         private ObjectPoolBase InternalCreateObjectPool(Type objectType, string name, bool allowMultiSpawn, float autoReleaseInterval, int capacity,
             float expireTime, int priority)
         {
-            if (_shutdown) throw new ObjectDisposedException(nameof(ObjectPoolModule));
             if (objectType == null)
             {
                 throw new GameFrameworkException("Object type is invalid.");
@@ -1299,9 +1282,8 @@ namespace EmberFrameWork
             ObjectPoolBase objectPool = null;
             if (_objectPools.TryGetValue(typeNamePair, out objectPool))
             {
-                _objectPools.Remove(typeNamePair);
                 objectPool.Shutdown();
-                return true;
+                return _objectPools.Remove(typeNamePair);
             }
 
             return false;

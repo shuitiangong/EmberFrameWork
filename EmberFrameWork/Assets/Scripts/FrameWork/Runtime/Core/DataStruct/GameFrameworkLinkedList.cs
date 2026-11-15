@@ -386,10 +386,7 @@ namespace EmberFrameWork
             /// </summary>
             void IEnumerator.Reset()
             {
-                // Reset 修改的是装箱副本，需要写回值类型枚举器。
-                IEnumerator enumerator = _enumerator;
-                enumerator.Reset();
-                _enumerator = (LinkedList<T>.Enumerator)enumerator;
+                ((IEnumerator<T>)_enumerator).Reset();
             }
         }
     }

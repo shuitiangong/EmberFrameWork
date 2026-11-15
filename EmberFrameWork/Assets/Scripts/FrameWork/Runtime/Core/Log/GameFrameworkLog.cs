@@ -8,13 +8,6 @@ namespace EmberFrameWork
     {
         private static ILogHelper s_LogHelper = new DefaultLogHelper();
 
-        /// <summary>每次进入运行模式恢复默认输出，包括关闭 Domain Reload 的情况。</summary>
-        [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
-        public static void ResetLogHelper()
-        {
-            s_LogHelper = new DefaultLogHelper();
-        }
-
         /// <summary>
         /// 设置游戏框架日志辅助器。
         /// </summary>

@@ -18,8 +18,8 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(3, pairs.Count);
             Assert.AreEqual(1, pairs[new TypeNamePair(typeof(int), "assets")]);
             Assert.AreEqual(new TypeNamePair(typeof(int)), new TypeNamePair(typeof(int), null));
-            pairs[default] = 4;
-            Assert.AreEqual(4, pairs[default]);
+            // 与原版一致：默认结构值没有有效 Type，不支持计算哈希。
+            Assert.Throws<System.NullReferenceException>(() => default(TypeNamePair).GetHashCode());
             Assert.Throws<GameFrameworkException>(() => new TypeNamePair(null));
         }
 
@@ -47,17 +47,17 @@ namespace EmberFrameWork.Tests
         }
 
         [Test]
-        public void RangeExcludesTerminalAndSupportsNullValues()
+        public void RangeExcludesTerminalAndFindsValues()
         {
             var list = new LinkedList<string>();
-            var first = list.AddLast((string)null);
+            var first = list.AddLast("first");
             list.AddLast("asset");
             var terminal = list.AddLast("terminal");
             var range = new GameFrameworkLinkedListRange<string>(first, terminal);
             Assert.AreEqual(2, range.Count);
-            Assert.IsTrue(range.Contains(null));
+            Assert.IsTrue(range.Contains("first"));
             Assert.IsFalse(range.Contains("terminal"));
-            CollectionAssert.AreEqual(new string[] { null, "asset" }, range);
+            CollectionAssert.AreEqual(new[] { "first", "asset" }, range);
             Assert.IsFalse(default(GameFrameworkLinkedListRange<string>).IsValid);
         }
 
@@ -65,13 +65,13 @@ namespace EmberFrameWork.Tests
         public void MultiDictionaryRemovesFirstMiddleAndLastWithoutTouchingOtherKeys()
         {
             var map = new GameFrameworkMultiDictionary<string, string>();
-            map.Add("a", null);
+            map.Add("a", "first");
             map.Add("b", "other");
             map.Add("a", "middle");
             map.Add("a", "last");
-            Assert.IsTrue(map.Contains("a", null));
+            Assert.IsTrue(map.Contains("a", "first"));
             Assert.IsTrue(map.Remove("a", "middle"));
-            Assert.IsTrue(map.Remove("a", null));
+            Assert.IsTrue(map.Remove("a", "first"));
             CollectionAssert.AreEqual(new[] { "last" }, map["a"]);
             Assert.IsTrue(map.Remove("a", "last"));
             Assert.IsFalse(map.Contains("a"));
@@ -100,7 +100,7 @@ namespace EmberFrameWork.Tests
         }
 
         [Test]
-        public void LinkedListEnumeratorResetReturnsToFirstElement()
+        public void LinkedListEnumeratorResetPreservesOriginalBoxingBehavior()
         {
             var list = new GameFrameworkLinkedList<int>();
             list.AddLast(1);
@@ -109,12 +109,12 @@ namespace EmberFrameWork.Tests
             Assert.IsTrue(iterator.MoveNext());
             Assert.IsTrue(iterator.MoveNext());
             iterator.Reset();
-            Assert.IsTrue(iterator.MoveNext());
-            Assert.AreEqual(1, iterator.Current);
+            // 原版 Reset 作用于底层枚举器的装箱副本，不改变当前遍历进度。
+            Assert.IsFalse(iterator.MoveNext());
         }
 
         [Test]
-        public void DictionaryEnumeratorResetWorksAfterEnd()
+        public void DictionaryEnumeratorResetPreservesOriginalBoxingBehavior()
         {
             var map = new GameFrameworkMultiDictionary<int, int>();
             map.Add(1, 10);
@@ -122,8 +122,7 @@ namespace EmberFrameWork.Tests
             Assert.IsTrue(iterator.MoveNext());
             Assert.IsFalse(iterator.MoveNext());
             iterator.Reset();
-            Assert.IsTrue(iterator.MoveNext());
-            Assert.AreEqual(1, ((KeyValuePair<int, GameFrameworkLinkedListRange<int>>)iterator.Current).Key);
+            Assert.IsFalse(iterator.MoveNext());
         }
     }
 }

@@ -13,8 +13,6 @@ namespace EmberFrameWork
         private bool _locked;
         private int _priority;
         private DateTime _lastUseTime;
-        // 注册期间由对象池独占包装对象；调用方不能直接归还 MemoryPool。
-        internal object PoolOwner;
 
         /// <summary>
         /// 初始化对象基类的新实例。

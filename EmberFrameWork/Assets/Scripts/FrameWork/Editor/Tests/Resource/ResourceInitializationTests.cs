@@ -1,3 +1,5 @@
+using System.Collections;
+using UnityEngine.TestTools;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -44,7 +46,8 @@ namespace EmberFrameWork.Tests
         [SetUp] public void SetUp() { _backend = new Backend(); _module = new ResourceModule(_backend); _module.Configure(new ResourceOptions()); }
         [TearDown] public void TearDown() => _module.Shutdown();
 
-        [Test] public async Task SuccessRequiresAllThreeStages()
+        [UnityTest] public IEnumerator SuccessRequiresAllThreeStages() => ResourceTestTask.Wait(SuccessRequiresAllThreeStagesAsync());
+        private async Task SuccessRequiresAllThreeStagesAsync()
         {
             Assert.AreEqual("1.0", await _module.InitPackage());
             CollectionAssert.AreEqual(new[] { "init", "version", "manifest:1.0" }, _backend.Calls);
@@ -55,7 +58,8 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(3, _backend.Calls.Count);
         }
 
-        [Test] public async Task ConcurrentRequestsShareInitialization()
+        [UnityTest] public IEnumerator ConcurrentRequestsShareInitialization() => ResourceTestTask.Wait(ConcurrentRequestsShareInitializationAsync());
+        private async Task ConcurrentRequestsShareInitializationAsync()
         {
             _backend.Gate = new TaskCompletionSource<bool>();
             var first = _module.InitPackage().AsTask();
@@ -68,7 +72,8 @@ namespace EmberFrameWork.Tests
             Assert.AreEqual(3, _backend.Calls.Count);
         }
 
-        [Test] public async Task EachFailureStopsSequenceAndCanRetry()
+        [UnityTest] public IEnumerator EachFailureStopsSequenceAndCanRetry() => ResourceTestTask.Wait(EachFailureStopsSequenceAndCanRetryAsync());
+        private async Task EachFailureStopsSequenceAndCanRetryAsync()
         {
             foreach (string stage in new[] { "init", "version", "manifest" })
             {
@@ -86,7 +91,8 @@ namespace EmberFrameWork.Tests
             Assert.IsNull(_module.LastError);
         }
 
-        [Test] public async Task EmptyVersionNeverLoadsManifest()
+        [UnityTest] public IEnumerator EmptyVersionNeverLoadsManifest() => ResourceTestTask.Wait(EmptyVersionNeverLoadsManifestAsync());
+        private async Task EmptyVersionNeverLoadsManifestAsync()
         {
             _backend.Version = "";
             try { await _module.InitPackage(); Assert.Fail("Expected failure"); }
@@ -95,7 +101,8 @@ namespace EmberFrameWork.Tests
             Assert.IsFalse(_module.IsReady);
         }
 
-        [Test] public async Task ShutdownRejectsLateSuccessAndCancelsLifetime()
+        [UnityTest] public IEnumerator ShutdownRejectsLateSuccessAndCancelsLifetime() => ResourceTestTask.Wait(ShutdownRejectsLateSuccessAndCancelsLifetimeAsync());
+        private async Task ShutdownRejectsLateSuccessAndCancelsLifetimeAsync()
         {
             _backend.Gate = new TaskCompletionSource<bool>();
             var pending = _module.InitPackage().AsTask();

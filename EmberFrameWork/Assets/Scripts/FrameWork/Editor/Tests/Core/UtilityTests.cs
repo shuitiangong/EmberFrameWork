@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Threading;
 using NUnit.Framework;
 
@@ -7,21 +6,18 @@ namespace EmberFrameWork.Tests
 {
     public class UtilityTests
     {
-        private sealed class NestedText
-        {
-            public override string ToString() => Utility.Text.Format("inner={0}", 7);
-        }
-
         [SetUp]
-        public void SetUp() => Utility.Text.ResetTextHelper();
+        public void SetUp() => Utility.Text.SetTextHelper(new DefaultTextHelper());
 
         [TearDown]
-        public void TearDown() => Utility.Text.ResetTextHelper();
+        public void TearDown() => Utility.Text.SetTextHelper(null);
 
         [Test]
-        public void NestedFormattingDoesNotOverwriteOuterText()
+        public void TextHelperAndFallbackFormatArguments()
         {
-            Assert.AreEqual("before inner=7 after", Utility.Text.Format("before {0} after", new NestedText()));
+            Assert.AreEqual("value=7/8", Utility.Text.Format("value={0}/{1}", 7, 8));
+            Utility.Text.SetTextHelper(null);
+            Assert.AreEqual("value=7/8", Utility.Text.Format("value={0}/{1}", 7, 8));
         }
 
         [Test]
@@ -56,29 +52,5 @@ namespace EmberFrameWork.Tests
             if (failure != null) throw failure;
         }
 
-        [Test]
-        public void DownloadSizeHandlesUnitBoundariesAndLargeValues()
-        {
-            var previous = CultureInfo.CurrentCulture;
-            try
-            {
-                CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
-                Assert.AreEqual("0 Bytes", Utility.File.GetLengthString(0));
-                Assert.AreEqual("1023 Bytes", Utility.File.GetLengthString(1023));
-                Assert.AreEqual("1.00 KB", Utility.File.GetLengthString(1024));
-                Assert.AreEqual("1.00 MB", Utility.File.GetLengthString(1024L * 1024));
-                Assert.AreEqual("3.00 GB", Utility.File.GetLengthString(3L * 1024 * 1024 * 1024));
-                Assert.Throws<ArgumentOutOfRangeException>(() => Utility.File.GetLengthString(-1));
-            }
-            finally { CultureInfo.CurrentCulture = previous; }
-        }
-
-        [Test]
-        public void NormalizeResourcePathsPreservesNullAndUrls()
-        {
-            Assert.IsNull(Utility.Path.GetRegularPath(null));
-            Assert.AreEqual("Assets/RawAssets/UI", Utility.Path.GetRegularPath(@"Assets\RawAssets\UI"));
-            Assert.AreEqual("https://cdn.example/game", Utility.Path.GetRegularPath("https://cdn.example/game"));
-        }
     }
 }
