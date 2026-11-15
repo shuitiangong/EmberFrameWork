@@ -138,6 +138,7 @@ namespace EmberFrameWork
 
         private void OnDestroy()
         {
+            Application.lowMemory -= OnLowMemory;
 #if !UNITY_EDITOR
             ModuleSystem.Shutdown();
 #endif
@@ -246,6 +247,7 @@ namespace EmberFrameWork
             {
                 objectPoolModule.ReleaseAllUnused();
             }
+            ModuleSystem.GetModule<IResourceModule>().OnLowMemory();
 
         }
     }

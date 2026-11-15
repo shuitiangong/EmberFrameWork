@@ -4,6 +4,32 @@
 
 最后更新：2026-11-15。
 
+## 资源模块 main 同步（2026-11-15）
+
+本轮按用户授权完成加载核心、初始化职责和资源回收三个步骤。基线为本地 TEngine main `3ffab9c6`，目标依赖保持 YooAsset `3.0.7`、UniTask `2.5.11`。下文早期迁移记录中的 Backend、Configure 和初始化状态枚举描述已由本节取代。
+
+- 加载核心：同步 main 的 `AssetObject`；恢复泛型委托到 `Type` 重载、资源信息查询、回调加载及直接句柄入口。池化加载每次借用对应一次 `UnloadAsset`；直接句柄由调用者 `Release/Dispose`，不进入对象池。
+- 初始化：新增 `ResourceModuleDriver`，由其读取现有 `ResourceSetting` 预设并应用模块属性，然后调用 `Initialize`。GameEntry 的 Start 显式确保 Driver 初始化后启动流程。流程使用 `InitPackage(packageName, true)` 等待包与清单就绪；失败重试仍由启动流程管理。移除 `IResourcePackageBackend`、`YooAssetPackageBackend`、`ResourceInitializationState` 及模块内共享 Task 初始化状态机。
+- 回收：恢复 main Driver 的定时系统回收、强制回收请求和 GC 开关；RootModule 低内存回调及场景加载完成接到该入口。GameEntry 退出时依次释放单例、清空入口缓存、关闭模块；资源模块取消任务、销毁资源池及自有 YooAsset 系统。
+- 资产绑定：GameEntry.prefab 新增 ResourceModuleDriver，继续引用原 ResourceSetting.asset，已有脚本及资产 GUID 保留。
+
+### 保留的适配与范围
+
+- YooAsset 3 使用 `InitializePackageAsync`、Options 参数、`LoadPackageManifestAsync`、`SetAsyncOperationMaxTimeSlice` 和明确的 ResourcePackage 实例。main 的默认包静态加载调用不适用于此版本。
+- 当前 UniTask 适配器等待结束后不自动抛出操作失败；保留显式状态检查、失败句柄释放、取消归还、同步与异步竞争处理、退出取消和资源销毁。加载失败仍遵循当前工程的异常语义。
+- `IsReady` 根据已成功加载清单的包记录判断，供现有流程、音频和场景入口使用。初始化中同包重复请求被拒绝；已初始化但未就绪的包可重试清单阶段，已就绪的包不重复加载清单。
+- ResourceSetting/ResourceOptions 保留为 Driver 的配置预设，不再作为资源模块的独立配置协议。AutoUnloadBundleWhenUnused 可配置，默认沿用当前 mini 的 true。
+- 当前运行范围仍为编辑器模拟和离线模式；在线下载、Web、加密、微信及完整回调族未纳入本轮。没有修改包依赖或接入 HybridCLR。
+
+### 验证结果
+
+- 17 项资源配置、加载接口、初始化前置条件、启动流程和 AssetsReference 测试通过；2 项 UI PlayMode 测试通过。
+- Launch 实际进入战斗场景，资源版本为 Simulate；Driver 和既有配置绑定有效。
+- 在运行会话中执行 `ResourceInitializationTests.VerifyRunningGame()`：验证真实资源同步与 Type 重载、并发缓存加载、取消归还、资源池借用计数、Prefab 销毁归还、直接句柄释放、无效定位地址、显式清理及低内存强制回收。
+- 在运行会话中发起加载后立即 Shutdown：待完成加载返回 null、IsReady 为 false、YooAssets.IsInitialized 为 false。
+- EditMode Test Runner 中跨播放模式的集成入口曾出现 NullReferenceException；最终将真实加载验证拆为上述独立运行入口，常规自动测试保留在 Test Runner 中。没有将失败尝试计为通过。
+- Unity 编译通过；尚未执行离线包构建或真机验证。
+
 ## 迁移基线核对（2026-11-15）
 
 ### 范围与迁移原则

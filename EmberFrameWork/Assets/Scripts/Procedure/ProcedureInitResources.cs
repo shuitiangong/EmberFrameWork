@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
+using YooAsset;
 using EmberFrameWork;
 using UnityEngine.Scripting;
 
@@ -12,7 +13,7 @@ namespace Procedure
     public sealed class ProcedureInitResources : ProcedureBase
     {
         private IResourceModule _resource;
-        private Task<string> _pending;
+        private Task<InitializePackageOperation> _pending;
         private bool _active;
         public string LastError { get; private set; }
         public bool IsLoading => _active && _pending != null;
@@ -31,7 +32,7 @@ namespace Procedure
             LastError = null;
             try
             {
-                _pending = _resource.InitPackage().AsTask();
+                _pending = _resource.InitPackage(_resource.DefaultPackageName, true).AsTask();
                 Log.Info("[Startup] 正在初始化资源包 {0}。", _resource.DefaultPackageName);
             }
             catch (Exception exception) { SetFailure(exception); }
@@ -51,7 +52,8 @@ namespace Procedure
             _pending = null;
             try
             {
-                string version = completed.GetAwaiter().GetResult();
+                completed.GetAwaiter().GetResult();
+                string version = _resource.PackageVersion;
                 if (!_resource.IsReady) throw new InvalidOperationException("初始化结束，但资源包尚未就绪。");
                 Log.Info("[Startup] 资源包就绪，版本 {0}。", version);
             }
@@ -63,7 +65,7 @@ namespace Procedure
         private void SetFailure(Exception exception)
         {
             _pending = null;
-            LastError = _resource?.LastError ?? exception.Message;
+            LastError = exception.Message;
             Log.Error("[Startup] 资源初始化失败：{0}。修复包体或收集配置后可重试；修改运行模式等参数后需重新启动。", LastError);
         }
 

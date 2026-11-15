@@ -51,6 +51,7 @@ namespace EmberFrameWork
                 if (handle.Status != EOperationStatus.Succeeded)
                     throw new InvalidOperationException($"加载场景 '{location}' 失败：{handle.Error}");
 
+                resource.ForceUnloadUnusedAssets(true);
                 return handle.SceneObject;
             }
             finally

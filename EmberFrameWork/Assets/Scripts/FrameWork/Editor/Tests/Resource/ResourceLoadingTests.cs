@@ -11,20 +11,12 @@ namespace EmberFrameWork.Tests
     // 原 Backend/Lease 缓存已移除，不再断言额外的别名合并、提前取消抛异常等行为。
     public class ResourceLoadingTests
     {
-        private sealed class InitializationBackend : IResourcePackageBackend
-        {
-            public UniTask InitializeAsync(ResourceOptions options, EPlayMode mode, CancellationToken token) => UniTask.CompletedTask;
-            public UniTask<string> RequestVersionAsync(CancellationToken token) => UniTask.FromResult("test");
-            public UniTask LoadManifestAsync(string version, CancellationToken token) => UniTask.CompletedTask;
-            public void Shutdown() { }
-        }
         private ResourceModule _module;
         [SetUp] public void SetUp()
         {
             GameFrameworkLog.SetLogHelper(null);
             ModuleSystem.Shutdown();
-            _module = new ResourceModule(new InitializationBackend());
-            _module.Configure(new ResourceOptions());
+            _module = new ResourceModule();
         }
         [TearDown] public void TearDown()
         {

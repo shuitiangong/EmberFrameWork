@@ -15,7 +15,7 @@ internal sealed class GameEntryInspector : Editor
         var initialization = procedure as Procedure.ProcedureInitResources;
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("当前流程", procedure?.GetType().Name ?? "未启动");
-        EditorGUILayout.LabelField("资源状态", resource.InitializationState.ToString());
+        EditorGUILayout.LabelField("资源状态", resource.IsReady ? "就绪" : initialization?.IsLoading == true ? "初始化中" : "未就绪");
         if (initialization != null && !string.IsNullOrEmpty(initialization.LastError))
             EditorGUILayout.HelpBox(initialization.LastError, MessageType.Error);
         using (new EditorGUI.DisabledScope(initialization == null || !initialization.CanRetry))

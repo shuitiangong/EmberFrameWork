@@ -1,4 +1,4 @@
-// Selected from TEngine (Copyright (c) 2022 ALEXTANG, MIT). See ../../Core/LICENSE.txt.
+// Adapted from TEngine main 3ffab9c6 (MIT). See ../../Core/LICENSE.txt.
 using System.Collections.Generic;
 using YooAsset;
 
@@ -11,7 +11,7 @@ namespace EmberFrameWork
         /// </summary>
         private sealed class AssetObject : ObjectBase
         {
-            private AssetHandle _assetHandle = null;
+            private HandleBase _assetHandle = null;
             private ResourceModule _resourceModule;
 
             public static AssetObject Create(string name, object target, object assetHandle, ResourceModule resourceModule)
@@ -28,7 +28,11 @@ namespace EmberFrameWork
 
                 AssetObject assetObject = MemoryPool.Acquire<AssetObject>();
                 assetObject.Initialize(name, target);
-                assetObject._assetHandle = (AssetHandle)assetHandle;
+                if (assetHandle is not HandleBase handleBase)
+                {
+                    throw new GameFrameworkException($"Unsupported handle type: {assetHandle.GetType()}.");
+                }
+                assetObject._assetHandle = handleBase;
                 assetObject._resourceModule = resourceModule;
                 return assetObject;
             }
@@ -48,12 +52,12 @@ namespace EmberFrameWork
             {
                 if (!isShutdown)
                 {
-                    AssetHandle handle = _assetHandle;
+                    HandleBase handle = _assetHandle;
                     if (handle is { IsValid: true })
                     {
                         handle.Dispose();
                     }
-                    handle = null;
+                    _assetHandle = null;
                 }
             }
         }

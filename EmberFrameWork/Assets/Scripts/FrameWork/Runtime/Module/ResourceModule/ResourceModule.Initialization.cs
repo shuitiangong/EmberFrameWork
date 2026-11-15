@@ -1,59 +1,89 @@
+// Adapted from TEngine main 3ffab9c6; YooAsset 3.0.7 API adaptation.
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-
+using YooAsset;
 namespace EmberFrameWork
 {
     internal sealed partial class ResourceModule
     {
-        private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
-        // Task 支持多个等待者，避免重复 await 单消费者 UniTask。
-        private Task<string> _initializationTask;
-        public ResourceInitializationState InitializationState { get; private set; }
-        public bool IsReady => InitializationState == ResourceInitializationState.Ready;
-        public string PackageVersion { get; private set; }
-        public string LastError { get; private set; }
-
-        public UniTask<string> InitPackage()
+        public async UniTask<InitializePackageOperation> InitPackage(string packageName, bool needInitMainFest = false)
         {
             if (_shutdown) throw new ObjectDisposedException(nameof(ResourceModule));
-            var options = RequireOptions();
-            if (_initializationTask == null || _initializationTask.IsCompleted && !IsReady)
-                _initializationTask = RunInitialization(options, _lifetime.Token);
-            return _initializationTask.AsUniTask(useCurrentSynchronizationContext: SynchronizationContext.Current != null);
-        }
-
-        private async Task<string> RunInitialization(ResourceOptions options, CancellationToken cancellationToken)
-        {
-            LastError = null;
-            PackageVersion = null;
+            if (DefaultPackage == null) throw new InvalidOperationException("请先调用 Initialize。");
+            if (string.IsNullOrWhiteSpace(packageName)) throw new ArgumentException("资源包名称不能为空。", nameof(packageName));
+            if (!_initializingPackages.Add(packageName)) throw new InvalidOperationException($"资源包正在初始化：{packageName}");
+            var token = _lifetime.Token;
             try
             {
-                InitializationState = ResourceInitializationState.InitializingPackage;
-                InitializeAssetPool();
-                await _backend.InitializeAsync(options, PlayMode, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                InitializationState = ResourceInitializationState.RequestingVersion;
-                string version = await _backend.RequestVersionAsync(cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                if (string.IsNullOrWhiteSpace(version)) throw new InvalidOperationException("资源包返回了空版本号。");
-                InitializationState = ResourceInitializationState.LoadingManifest;
-                await _backend.LoadManifestAsync(version, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                PackageVersion = version;
-                InitializationState = ResourceInitializationState.Ready;
-                return version;
-            }
-            catch (Exception exception)
-            {
-                if (!_shutdown)
+                if (!PackageMap.TryGetValue(packageName, out var package))
                 {
-                    LastError = $"[{options.DefaultPackageName}] {InitializationState}: {exception.Message}";
-                    InitializationState = ResourceInitializationState.Failed;
+                    if (!YooAssets.TryGetPackage(packageName, out package)) package = YooAssets.CreatePackage(packageName);
+                    PackageMap[packageName] = package;
                 }
-                throw;
+                InitializePackageOperation operation = null;
+                if (package.InitializeStatus != EOperationStatus.Succeeded)
+                {
+                    InitializePackageOptions options;
+                    if (PlayMode == EPlayMode.EditorSimulateMode)
+                    {
+#if UNITY_EDITOR
+                        var build = EditorSimulateBuildInvoker.Build(packageName, (int)EBundleType.VirtualAssetBundle);
+                        options = new EditorSimulateModeOptions
+                        {
+                            EditorFileSystemParameters = FileSystemParameters.CreateDefaultEditorFileSystemParameters(build.PackageRootDirectory)
+                        };
+#else
+                        throw new PlatformNotSupportedException("编辑器模拟模式不能用于播放器。");
+#endif
+                    }
+                    else if (PlayMode == EPlayMode.OfflinePlayMode)
+                    {
+                        options = new OfflinePlayModeOptions
+                        {
+                            BuiltinFileSystemParameters = FileSystemParameters.CreateDefaultBuiltinFileSystemParameters()
+                        };
+                    }
+                    else throw new NotSupportedException("mini 当前支持编辑器模拟和离线模式。");
+                    options.AutoUnloadBundleWhenUnused = AutoUnloadBundleWhenUnused;
+                    operation = package.InitializePackageAsync(options);
+                    await operation.ToUniTask(cancellationToken: token);
+                    token.ThrowIfCancellationRequested();
+                    CheckOperation(operation, "初始化资源包");
+                }
+                if (needInitMainFest && !_readyPackages.Contains(packageName))
+                {
+                    var version = RequestPackageVersionAsync(customPackageName: packageName);
+                    await version.ToUniTask(cancellationToken: token);
+                    token.ThrowIfCancellationRequested();
+                    CheckOperation(version, "获取资源版本");
+                    if (string.IsNullOrWhiteSpace(version.PackageVersion)) throw new GameFrameworkException("资源版本号为空。");
+                    var manifest = UpdatePackageManifestAsync(version.PackageVersion, customPackageName: packageName);
+                    await manifest.ToUniTask(cancellationToken: token);
+                    token.ThrowIfCancellationRequested();
+                    CheckOperation(manifest, "加载资源清单");
+                    _readyPackages.Add(packageName);
+                }
+                return operation;
             }
+            finally { _initializingPackages.Remove(packageName); }
+        }
+        public string GetPackageVersion(string customPackageName = "") => GetPackageForLoading(customPackageName).GetPackageVersion();
+        public RequestPackageVersionOperation RequestPackageVersionAsync(bool appendTimeTicks = false, int timeout = 60, string customPackageName = "")
+            => GetPackageForLoading(customPackageName).RequestPackageVersionAsync(new RequestPackageVersionOptions(appendTimeTicks, timeout));
+        public LoadPackageManifestOperation UpdatePackageManifestAsync(string packageVersion, int timeout = 60, string customPackageName = "")
+        {
+            var package = GetPackageForLoading(customPackageName);
+            _readyPackages.Remove(package.PackageName);
+            var operation = package.LoadPackageManifestAsync(new LoadPackageManifestOptions(packageVersion, timeout));
+            operation.Completed += completed =>
+            {
+                if (!_shutdown && completed.Status == EOperationStatus.Succeeded) _readyPackages.Add(package.PackageName);
+            };
+            return operation;
+        }
+        private static void CheckOperation(AsyncOperationBase operation, string stage)
+        {
+            if (operation.Status != EOperationStatus.Succeeded) throw new GameFrameworkException($"{stage}失败：{operation.Error}");
         }
     }
 }

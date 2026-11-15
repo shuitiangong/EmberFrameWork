@@ -6,7 +6,7 @@ using YooAsset;
 
 namespace EmberFrameWork
 {
-    /// <summary>资源配置数据。模块接收、返回配置时均复制，避免外部修改运行时配置。</summary>
+    /// <summary>资源配置预设；由 ResourceModuleDriver 读取并应用到资源模块。</summary>
     [Serializable]
     public sealed class ResourceOptions
     {
@@ -23,6 +23,7 @@ namespace EmberFrameWork
         [Min(1)] public int DownloadingMaxNum = 10;
         [Min(0)] public int FailedTryAgain = 3;
         [Min(1)] public long Milliseconds = 30;
+        public bool AutoUnloadBundleWhenUnused = true;
 
         [Min(0)] public float AssetAutoReleaseInterval = 60f;
         [Min(0)] public int AssetCapacity = 64;

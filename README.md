@@ -5,6 +5,8 @@ Unity游戏框架
 
 项目后续工作统一记录在 [待办清单](TODO.md)，完成任务时同步更新验证结果。
 
+资源模块已按 TEngine main `3ffab9c6` 同步加载接口、ResourceModuleDriver 初始化职责和回收流程，并适配 YooAsset 3.0.7。当前入口为 `GameEntry.Start → ResourceModuleDriver.Initialize → ProcedureInitResources`；资源模块不再提供旧 Configure／Backend 初始化协议。具体适配边界及验证记录见 [资源模块 main 同步](TODO.md#资源模块-main-同步2026-11-15)。
+
 框架目录采用 `Runtime` 与 `Editor` 分层：`EmberFrameWork/Assets/Scripts/FrameWork/Runtime/Core` 存放核心代码，FSM 位于其 `Fsm` 子目录；`FrameWork/Editor` 存放编辑器代码，当前测试分别位于 `Editor/Tests/Core` 和 `Editor/Tests/Fsm`。
 
 框架程序集边界沿用 TEngine，仅保留 `EmberFrameWork.Runtime` 和 `EmberFrameWork.Editor` 两个程序集。后续模块归入对应层，不自行新增 TEngine 中不存在的模块级或测试专用程序集。Editor 程序集引用 Runtime，并通过 `includePlatforms: ["Editor"]` 限定在编辑器中编译；现有测试所需的 NUnit 引用集中配置在该程序集。

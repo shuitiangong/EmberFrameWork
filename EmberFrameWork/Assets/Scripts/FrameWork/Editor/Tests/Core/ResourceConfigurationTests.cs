@@ -58,44 +58,24 @@ namespace EmberFrameWork.Tests
             Assert.Throws<ArgumentException>(() => options.CreateValidatedCopy(false, false));
         }
 
-        [Test] public void ModuleConfigurationIsCopiedAndSingleAssignment()
+
+        [Test] public void ModulePropertiesFollowMainWithoutInitializingYooAsset()
         {
             var module = ModuleSystem.GetModule<IResourceModule>();
-            Assert.IsFalse(module.IsConfigured);
-            Assert.Throws<InvalidOperationException>(() => { var ignored = module.Options; });
-            var input = new ResourceOptions();
-            module.Configure(input);
-            input.DefaultPackageName = "changed";
-            module.Options.DefaultPackageName = "also changed";
             Assert.AreEqual("DefaultPackage", module.DefaultPackageName);
-#if UNITY_EDITOR
-            Assert.AreEqual(EPlayMode.EditorSimulateMode, module.PlayMode);
-#else
             Assert.AreEqual(EPlayMode.OfflinePlayMode, module.PlayMode);
-#endif
             Assert.AreEqual(4, ((Module)module).Priority);
-            Assert.Throws<InvalidOperationException>(() => module.Configure(new ResourceOptions()));
+            module.DefaultPackageName = "AnotherPackage";
+            module.PlayMode = EPlayMode.EditorSimulateMode;
+            Assert.AreEqual("AnotherPackage", module.DefaultPackageName);
+            Assert.IsFalse(module.IsReady);
         }
-
-        [Test] public void FailedConfigurationCanBeRetried()
+        [Test] public void ShutdownPreventsReinitializingOldModule()
         {
             var module = ModuleSystem.GetModule<IResourceModule>();
-            Assert.Throws<ArgumentException>(() => module.Configure(new ResourceOptions { DefaultPackageName = "" }));
-            Assert.IsFalse(module.IsConfigured);
-            module.Configure(new ResourceOptions());
-            Assert.IsTrue(module.IsConfigured);
-        }
-
-        [Test] public void ShutdownInvalidatesOldModuleAndNewSessionCanConfigure()
-        {
-            var module = ModuleSystem.GetModule<IResourceModule>();
-            module.Configure(new ResourceOptions());
             ModuleSystem.Shutdown();
-            Assert.IsFalse(module.IsConfigured);
-            Assert.Throws<ObjectDisposedException>(() => module.Configure(new ResourceOptions()));
-            var next = ModuleSystem.GetModule<IResourceModule>();
-            Assert.AreNotSame(module, next);
-            next.Configure(new ResourceOptions());
+            Assert.Throws<ObjectDisposedException>(() => module.Initialize());
+            Assert.AreNotSame(module, ModuleSystem.GetModule<IResourceModule>());
         }
     }
 }

@@ -1,24 +1,31 @@
-// Adapted from TEngine GameEntry (Copyright (c) 2022 ALEXTANG, MIT).
-// See FrameWork/Runtime/Core/LICENSE.txt.
+// Adapted from TEngine GameEntry (MIT). See FrameWork/Runtime/Core/LICENSE.txt.
 using EmberFrameWork;
 using UnityEngine;
-
 namespace EmberFrameWork.Game
 {
+    [RequireComponent(typeof(ResourceModuleDriver))]
     public class GameEntry : MonoBehaviour
     {
-        // 阶段性连接：ResourceModuleDriver 尚未恢复，暂时沿用已绑定的资源配置。
-        [SerializeField] private ResourceSetting resourceSetting;
-
         private void Awake()
         {
             ModuleSystem.GetModule<IUpdateDriver>();
-            var resource = ModuleSystem.GetModule<IResourceModule>();
-            resource.Configure(resourceSetting);
-            // 原版 IDebuggerModule 尚未迁移，本步不引入调试模块。
             ModuleSystem.GetModule<IFsmModule>();
+            DontDestroyOnLoad(gameObject);
+        }
+        private void Start()
+        {
+            // 显式保证初始化先于流程启动，不依赖同帧各组件 Start 的排列。
+            GetComponent<ResourceModuleDriver>().Initialize();
             Settings.ProcedureSetting.StartProcedure().Forget();
-            DontDestroyOnLoad(this);
+        }
+        private void OnDestroy()
+        {
+            try { SingletonSystem.Release(); }
+            finally
+            {
+                GameModule.Shutdown();
+                ModuleSystem.Shutdown();
+            }
         }
     }
 }

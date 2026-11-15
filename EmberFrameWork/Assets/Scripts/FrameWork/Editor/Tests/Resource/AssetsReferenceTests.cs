@@ -16,31 +16,7 @@ namespace EmberFrameWork.Tests
     public class AssetsReferenceTests
     {
         // 仅记录归还；本测试不初始化资源包，也不进行真实资源加载。
-        private sealed class RecordingResourceModule : IResourceModule
-        {
-            public readonly List<object> Released = new List<object>();
-            public void UnloadAsset(object asset) => Released.Add(asset);
-            public bool IsConfigured => false;
-            public string DefaultPackageName => null;
-            public EPlayMode PlayMode => default;
-            public ResourceOptions Options => null;
-            public ResourceInitializationState InitializationState => default;
-            public bool IsReady => false;
-            public string PackageVersion => null;
-            public string LastError => null;
-            public float AssetAutoReleaseInterval { get; set; }
-            public int AssetCapacity { get; set; }
-            public float AssetExpireTime { get; set; }
-            public int AssetPriority { get; set; }
-            public UniTask<string> InitPackage() => throw new NotSupportedException();
-            public T LoadAsset<T>(string location, string packageName = "") where T : Object => throw new NotSupportedException();
-            public UniTask<T> LoadAssetAsync<T>(string location, CancellationToken cancellationToken = default, string packageName = "") where T : Object => throw new NotSupportedException();
-            public GameObject LoadGameObject(string location, Transform parent = null, string packageName = "") => throw new NotSupportedException();
-            public UniTask<GameObject> LoadGameObjectAsync(string location, Transform parent = null, CancellationToken cancellationToken = default, string packageName = "") => throw new NotSupportedException();
-            public UniTask UnloadUnusedAssetsAsync() => throw new NotSupportedException();
-            public void Configure(ResourceOptions options) => throw new NotSupportedException();
-            public void Configure(ResourceSetting setting) => throw new NotSupportedException();
-        }
+        private sealed class RecordingResourceModule : ResourceTestModule { }
 
         [UnityTest]
         public IEnumerator RebindingAndCloningPreserveResourceOwnership()

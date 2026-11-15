@@ -1,43 +1,49 @@
-using YooAsset;
-using Cysharp.Threading.Tasks;
+using System;
 using System.Threading;
-
+using Cysharp.Threading.Tasks;
+using UnityEngine;
+using YooAsset;
 namespace EmberFrameWork
 {
-    /// <summary>资源模块的配置及默认资源包初始化入口；所有方法应从 Unity 主线程调用。</summary>
     public interface IResourceModule
     {
-        /// <summary>仅表示配置已接收，不表示资源包已初始化。</summary>
-        bool IsConfigured { get; }
-        string DefaultPackageName { get; }
-        /// <summary>当前实际使用的模式：编辑器取 EditorPlayMode，播放器取 PlayMode。</summary>
-        EPlayMode PlayMode { get; }
-        /// <summary>返回配置副本，修改副本不会影响模块。</summary>
-        ResourceOptions Options { get; }
-        ResourceInitializationState InitializationState { get; }
+        string DefaultPackageName { get; set; }
+        EPlayMode PlayMode { get; set; }
+        long Milliseconds { get; set; }
+        bool AutoUnloadBundleWhenUnused { get; set; }
         bool IsReady { get; }
         string PackageVersion { get; }
-        string LastError { get; }
-        /// <summary>初始化默认包、获取版本并加载清单。重复调用共享任务；失败后可重试。</summary>
-        UniTask<string> InitPackage();
-        /// <summary>加载资源；每次成功调用都需要对应一次 UnloadAsset。指定包须已初始化。</summary>
+        void Initialize();
+        UniTask<InitializePackageOperation> InitPackage(string packageName, bool needInitMainFest = false);
+        string GetPackageVersion(string customPackageName = "");
+        RequestPackageVersionOperation RequestPackageVersionAsync(bool appendTimeTicks = false, int timeout = 60, string customPackageName = "");
+        LoadPackageManifestOperation UpdatePackageManifestAsync(string packageVersion, int timeout = 60, string customPackageName = "");
+        AssetInfo GetAssetInfo(string location, string packageName = "");
+        AssetInfo[] GetAssetInfos(string tag, string packageName = "");
+        AssetInfo[] GetAssetInfos(string[] tags, string packageName = "");
+        bool CheckLocationValid(string location, string packageName = "");
+        // 池化加载每次成功借用对应一次 UnloadAsset。
         T LoadAsset<T>(string location, string packageName = "") where T : UnityEngine.Object;
-        /// <summary>异步加载并借用资源。取消时返回 null，缓存命中后仍会异步恢复。</summary>
+        UnityEngine.Object LoadAsset(string location, Type assetType, string packageName = "");
+        UniTaskVoid LoadAsset<T>(string location, Action<T> callback, string packageName = "") where T : UnityEngine.Object;
         UniTask<T> LoadAssetAsync<T>(string location, CancellationToken cancellationToken = default, string packageName = "") where T : UnityEngine.Object;
-        /// <summary>加载 Prefab 并实例化；实例的 AssetsReference 在 OnDestroy 中归还资源。</summary>
-        UnityEngine.GameObject LoadGameObject(string location, UnityEngine.Transform parent = null, string packageName = "");
-        /// <summary>异步加载并实例化 Prefab。取消时返回 null。</summary>
-        UniTask<UnityEngine.GameObject> LoadGameObjectAsync(string location, UnityEngine.Transform parent = null,
-            CancellationToken cancellationToken = default, string packageName = "");
+        UniTask<UnityEngine.Object> LoadAssetAsync(string location, Type assetType, CancellationToken cancellationToken = default, string packageName = "");
+        GameObject LoadGameObject(string location, Transform parent = null, string packageName = "");
+        UniTask<GameObject> LoadGameObjectAsync(string location, Transform parent = null, CancellationToken cancellationToken = default, string packageName = "");
+        // 直接句柄由调用者释放，不进入资源池。
+        AssetHandle LoadAssetSyncHandle<T>(string location, string packageName = "") where T : UnityEngine.Object;
+        AssetHandle LoadAssetSyncHandle(string location, Type type, string packageName = "");
+        AssetHandle LoadAssetAsyncHandle<T>(string location, string packageName = "") where T : UnityEngine.Object;
+        AssetHandle LoadAssetAsyncHandle(string location, Type assetType, string packageName = "");
         float AssetAutoReleaseInterval { get; set; }
         int AssetCapacity { get; set; }
         float AssetExpireTime { get; set; }
         int AssetPriority { get; set; }
-        /// <summary>归还一次资源借用；引用归零后仍可缓存，直到过期或主动清理。</summary>
         void UnloadAsset(object asset);
-        /// <summary>释放所有空闲缓存，再等待 YooAsset 清理未使用资源。</summary>
+        void UnloadUnusedAssets();
         UniTask UnloadUnusedAssetsAsync();
-        void Configure(ResourceOptions options);
-        void Configure(ResourceSetting setting);
+        void OnLowMemory();
+        void SetForceUnloadUnusedAssetsAction(Action<bool> action);
+        void ForceUnloadUnusedAssets(bool performGCCollect);
     }
 }
