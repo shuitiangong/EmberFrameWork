@@ -13,6 +13,8 @@ namespace EmberFrameWork
     {
         #region Propreties
 
+        private SetUISafeFitHelper _setUISafeFitHelper;
+
         private System.Action<UIWindow> _prepareCallback;
 
         private bool _isCreate = false;
@@ -20,13 +22,13 @@ namespace EmberFrameWork
         private GameObject _panel;
 
         private Canvas _canvas;
-        
+
         public Canvas Canvas => _canvas;
 
         private Canvas[] _childCanvas;
 
         private GraphicRaycaster _raycaster;
-        
+
         public GraphicRaycaster GraphicRaycaster => _raycaster;
 
         private GraphicRaycaster[] _childRaycaster;
@@ -37,7 +39,7 @@ namespace EmberFrameWork
         /// 窗口位置组件。
         /// </summary>
         public override Transform transform => _panel.transform;
-        
+
         /// <summary>
         /// 窗口矩阵位置组件。
         /// </summary>
@@ -72,12 +74,12 @@ namespace EmberFrameWork
         /// 是内部资源无需AB加载。
         /// </summary>
         public bool FromResources { private set; get; }
-        
+
         /// <summary>
         /// 隐藏窗口关闭时间。
         /// </summary>
         public int HideTimeToClose { get; set; }
-        
+
         public int HideTimerId { get; set; }
 
         /// <summary>
@@ -106,25 +108,31 @@ namespace EmberFrameWork
                         return;
                     }
 
+                    var oldOrder = _canvas.sortingOrder;
                     // 设置父类
                     _canvas.sortingOrder = value;
-
                     // 设置子类
-                    int depth = value;
+                    // int depth = value;
                     for (int i = 0; i < _childCanvas.Length; i++)
                     {
                         var canvas = _childCanvas[i];
                         if (canvas != _canvas)
                         {
-                            depth += 5; //注意递增值
-                            canvas.sortingOrder = depth;
+                            // depth += 5; //注意递增值
+                            // canvas.sortingOrder = depth;
+                            canvas.sortingOrder = value + (canvas.sortingOrder - oldOrder);
                         }
                     }
 
+
                     // 虚函数
-                    if (_isCreate)
+                    if (Visible)
                     {
-                        OnSortDepth(value);
+                        _OnSortDepth();
+                    }
+                    else
+                    {
+                        _isSortingOrderDirty = true;
                     }
                 }
             }
@@ -160,6 +168,12 @@ namespace EmberFrameWork
                     for (int i = 0; i < _childCanvas.Length; i++)
                     {
                         _childCanvas[i].gameObject.layer = setLayer;
+                    }
+
+                    if (value && _isCreate)
+                    {
+                        _isSortingOrderDirty = false;
+                        _OnSortDepth();
                     }
 
                     // 交互设置
@@ -208,12 +222,12 @@ namespace EmberFrameWork
         /// 是否加载完毕。
         /// </summary>
         internal bool IsLoadDone = false;
-        
+
         /// <summary>
         /// UI是否销毁。
         /// </summary>
         internal bool IsDestroyed = false;
-        
+
         /// <summary>
         /// UI是否隐藏标志位。
         /// </summary>
@@ -230,6 +244,59 @@ namespace EmberFrameWork
             FromResources = fromResources;
             HideTimeToClose = hideTimeToClose;
         }
+
+        #region 刘海屏适配
+
+        /// <summary>
+        /// 移动设备屏幕适配
+        /// </summary>
+        /// <param name="fitRect">适配的RectTransform对象</param>
+        /// <param name="liuHaiFit">是否开启刘海屏顶部适配</param>
+        /// <param name="topSpacing">刘海屏顶部适配偏移高度</param>
+        /// <param name="bottomFit">是否开启刘海屏底部适配</param>
+        /// <param name="bottomSpacing">刘海屏底部适配偏移高度</param>
+        public void SetUIFit(RectTransform fitRect, bool liuHaiFit = true, float topSpacing = 0, bool bottomFit = true, float bottomSpacing = 0)
+        {
+            if (_setUISafeFitHelper == null)
+            {
+                _setUISafeFitHelper = new SetUISafeFitHelper(fitRect, liuHaiFit, topSpacing, bottomFit, bottomSpacing);
+            }
+            _setUISafeFitHelper?.SetUIFit();
+        }
+
+        /// <summary>
+        /// rectTransform不受m_curRect适配影响
+        /// </summary>
+        /// <param name="rect"></param>
+        public void SetUINotFit(RectTransform rect)
+        {
+            if (rect == null)
+            {
+                return;
+            }
+
+            _setUISafeFitHelper?.SetUINotFit(rect);
+        }
+
+        /// <summary>
+        /// 设置某一个节点不受指定RectTransform的影响
+        /// </summary>
+        /// <param name="rect">设置的RectTransform</param>
+        /// <param name="refRect">依赖的RectTransform</param>
+        public void SetUINotFit(RectTransform rect, RectTransform refRect)
+        {
+            if (rect == null || refRect == null)
+            {
+                return;
+            }
+            if (_setUISafeFitHelper == null)
+            {
+                _setUISafeFitHelper = new SetUISafeFitHelper();
+            }
+            _setUISafeFitHelper?.SetUINotFit(rect, refRect);
+        }
+
+        #endregion
 
         internal void TryInvoke(System.Action<UIWindow> prepareCallback, System.Object[] userDatas)
         {
@@ -274,6 +341,7 @@ namespace EmberFrameWork
             if (_isCreate == false)
             {
                 _isCreate = true;
+                Inject();
                 ScriptGenerator();
                 BindMemberProperty();
                 RegisterEvent();
@@ -381,7 +449,7 @@ namespace EmberFrameWork
                 Object.Destroy(_panel);
                 _panel = null;
             }
-            
+
             IsDestroyed = true;
 
             if (!isShutDown)
@@ -402,13 +470,13 @@ namespace EmberFrameWork
             }
 
             IsLoadDone = true;
-            
+
             if (IsDestroyed)
             {
                 Object.Destroy(panel);
                 return;
             }
-            
+
             panel.name = GetType().Name;
             _panel = panel;
             _panel.transform.localPosition = Vector3.zero;
@@ -433,7 +501,7 @@ namespace EmberFrameWork
             IsPrepare = true;
             _prepareCallback?.Invoke(this);
         }
-        
+
         protected virtual void Hide()
         {
             UIModule.Instance.HideUI(this.GetType());
@@ -443,7 +511,7 @@ namespace EmberFrameWork
         {
             UIModule.Instance.CloseUI(this.GetType());
         }
-        
+
         internal void CancelHideToCloseTimer()
         {
             IsHide = false;

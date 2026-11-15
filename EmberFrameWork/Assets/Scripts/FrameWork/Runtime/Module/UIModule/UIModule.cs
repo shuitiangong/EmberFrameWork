@@ -373,6 +373,7 @@ namespace EmberFrameWork
                 return;
             }
 
+            window.CancelHideToCloseTimer();
             window.Visible = false;
             window.IsHide = true;
             window.HideTimerId = GameModule.Timer.AddTimer((arg) =>
@@ -438,9 +439,9 @@ namespace EmberFrameWork
 
         private void OnWindowPrepare(UIWindow window)
         {
-            OnSortWindowDepth(window.WindowLayer);
             window.InternalCreate();
             window.InternalRefresh();
+            OnSortWindowDepth(window.WindowLayer);
             OnSetWindowVisible();
         }
 

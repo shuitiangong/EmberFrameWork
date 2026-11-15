@@ -16,7 +16,7 @@ namespace EmberFrameWork
         /// 窗口组件矩阵位置组件。
         /// </summary>
         public override RectTransform rectTransform { protected set; get; }
-        
+
         /// <summary>
         /// 窗口位置组件。
         /// </summary>
@@ -54,7 +54,7 @@ namespace EmberFrameWork
                 return null;
             }
         }
-        
+
         /// <summary>
         /// 窗口可见性。
         /// </summary>
@@ -104,7 +104,7 @@ namespace EmberFrameWork
                 for (int i = 0; i < listChild.Count; i++)
                 {
                     var uiWidget = listChild[i];
-                    
+
                     if (uiWidget == null)
                     {
                         continue;
@@ -210,6 +210,7 @@ namespace EmberFrameWork
             _parent = parentUI;
             Parent.ListChild.Add(this);
             Parent.SetUpdateDirty();
+            Inject();
             ScriptGenerator();
             BindMemberProperty();
             RegisterEvent();
@@ -282,7 +283,7 @@ namespace EmberFrameWork
         protected internal void OnDestroyWidget()
         {
             Parent?.SetUpdateDirty();
-            
+
             RemoveAllUIEvent();
 
             foreach (var uiChild in ListChild)
