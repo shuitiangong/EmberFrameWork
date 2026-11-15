@@ -22,10 +22,11 @@ namespace EmberFrameWork
         UniTask<string> InitPackage();
         /// <summary>加载资源；每次成功调用都需要对应一次 UnloadAsset。指定包须已初始化。</summary>
         T LoadAsset<T>(string location, string packageName = "") where T : UnityEngine.Object;
-        /// <summary>保留 TEngine 原等待和取消语义；加载等待取消时返回 null，缓存命中后 Yield。</summary>
+        /// <summary>异步加载并借用资源。取消时返回 null，缓存命中后仍会异步恢复。</summary>
         UniTask<T> LoadAssetAsync<T>(string location, CancellationToken cancellationToken = default, string packageName = "") where T : UnityEngine.Object;
         /// <summary>加载 Prefab 并实例化；实例的 AssetsReference 在 OnDestroy 中归还资源。</summary>
         UnityEngine.GameObject LoadGameObject(string location, UnityEngine.Transform parent = null, string packageName = "");
+        /// <summary>异步加载并实例化 Prefab。取消时返回 null。</summary>
         UniTask<UnityEngine.GameObject> LoadGameObjectAsync(string location, UnityEngine.Transform parent = null,
             CancellationToken cancellationToken = default, string packageName = "");
         float AssetAutoReleaseInterval { get; set; }
