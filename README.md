@@ -1,6 +1,8 @@
 # EmberFrameWork
 Unity游戏框架
 
+> 当前迁移原则（2026-11-15）：只迁入当前需要的功能及其真实依赖；已经选中的功能尽量保留 TEngine 原实现。当前代码差异与验证状态见 [迁移基线核对](TODO.md#迁移基线核对2026-11-15)。下文为早期阶段说明，其中显式模块注册、同步流程启动、GameEntry 驱动与异常防护等描述已与当前代码不同；使用时以当前源码和迁移基线为准。
+
 项目后续工作统一记录在 [待办清单](TODO.md)，完成任务时同步更新验证结果。
 
 框架目录采用 `Runtime` 与 `Editor` 分层：`EmberFrameWork/Assets/Scripts/FrameWork/Runtime/Core` 存放核心代码，FSM 位于其 `Fsm` 子目录；`FrameWork/Editor` 存放编辑器代码，当前测试分别位于 `Editor/Tests/Core` 和 `Editor/Tests/Fsm`。

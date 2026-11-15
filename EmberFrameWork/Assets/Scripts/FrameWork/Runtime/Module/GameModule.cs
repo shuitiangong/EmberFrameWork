@@ -14,6 +14,9 @@ namespace EmberFrameWork
 
         private static UIModule _ui;
 
+        /// <summary>获取主场景加载模块。</summary>
+        public static ISceneModule Scene => Get<ISceneModule>();
+
         private static T Get<T>() where T : class
         {
             T module = ModuleSystem.GetModule<T>();
