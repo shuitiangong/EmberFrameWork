@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Serialization;
 using Object = UnityEngine.Object;
 
 namespace EmberFrameWork
@@ -10,17 +9,26 @@ namespace EmberFrameWork
     [Serializable]
     public struct AssetsRefInfo
     {
-        public int instanceId;
+#if UNITY_6000_1_OR_NEWER
+        public readonly EntityId instanceID;
+#else
+        public readonly int instanceID;
+#endif
 
         public Object refAsset;
 
         public AssetsRefInfo(Object refAsset)
         {
             this.refAsset = refAsset;
-            instanceId = this.refAsset.GetInstanceID();
+#if UNITY_6000_1_OR_NEWER
+            instanceID = refAsset.GetEntityId();
+#else
+            instanceID = refAsset.GetInstanceID();
+#endif
         }
     }
 
+    [DisallowMultipleComponent]
     public sealed class AssetsReference : MonoBehaviour
     {
         [SerializeField]
@@ -29,11 +37,18 @@ namespace EmberFrameWork
         [SerializeField]
         private List<AssetsRefInfo> refAssetInfoList;
 
-        private IResourceModule _resourceModule;
+        private static IResourceModule _resourceModule;
 
-        private void OnDestroy()
+        private static Dictionary<GameObject, AssetsReference> _originalRefs = new();
+
+
+        private void CheckInit()
         {
-            if (_resourceModule == null)
+            if (_resourceModule != null)
+            {
+                return;
+            }
+            else
             {
                 _resourceModule = ModuleSystem.GetModule<IResourceModule>();
             }
@@ -42,10 +57,52 @@ namespace EmberFrameWork
             {
                 throw new GameFrameworkException($"resourceModule is null.");
             }
+        }
 
+        private void CheckRelease()
+        {
             if (sourceGameObject != null)
             {
                 _resourceModule.UnloadAsset(sourceGameObject);
+            }
+            else
+            {
+                Log.Warning($"sourceGameObject is not invalid.");
+            }
+        }
+
+
+        private void Awake()
+        {
+            // If it is a clone, clear the reference records before cloning
+            if (!IsOriginalInstance())
+            {
+                ClearCloneReferences();
+            }
+        }
+
+        private bool IsOriginalInstance()
+        {
+            return _originalRefs.TryGetValue(gameObject, out var originalComponent) &&
+                   originalComponent == this;
+        }
+
+        private void ClearCloneReferences()
+        {
+            sourceGameObject = null;
+            refAssetInfoList?.Clear();
+        }
+
+        private void OnDestroy()
+        {
+            if (_originalRefs.TryGetValue(gameObject, out var reference) && reference == this)
+            {
+                _originalRefs.Remove(gameObject);
+            }
+            CheckInit();
+            if (sourceGameObject != null)
+            {
+                CheckRelease();
             }
 
             ReleaseRefAssetInfoList();
@@ -78,10 +135,13 @@ namespace EmberFrameWork
 
             _resourceModule = resourceModule;
             sourceGameObject = source;
+
+            _originalRefs[gameObject] = this;
+
             return this;
         }
 
-        public AssetsReference Ref<T>(T source, IResourceModule resourceModule = null) where T : UnityEngine.Object
+        public AssetsReference Ref<T>(T source, IResourceModule resourceModule = null) where T : Object
         {
             if (source == null)
             {
@@ -98,7 +158,7 @@ namespace EmberFrameWork
             return this;
         }
 
-        public static AssetsReference Instantiate(GameObject source, Transform parent = null, IResourceModule resourceModule = null)
+        internal static AssetsReference Instantiate(GameObject source, Transform parent = null, IResourceModule resourceModule = null)
         {
             if (source == null)
             {
@@ -127,10 +187,10 @@ namespace EmberFrameWork
             }
 
             var comp = instance.GetComponent<AssetsReference>();
-            return comp ? comp : instance.AddComponent<AssetsReference>().Ref(source, resourceModule);
+            return comp ? comp.Ref(source, resourceModule) : instance.AddComponent<AssetsReference>().Ref(source, resourceModule);
         }
 
-        public static AssetsReference Ref<T>(T source, GameObject instance, IResourceModule resourceModule = null) where T : UnityEngine.Object
+        public static AssetsReference Ref<T>(T source, GameObject instance, IResourceModule resourceModule = null) where T : Object
         {
             if (source == null)
             {
@@ -138,7 +198,7 @@ namespace EmberFrameWork
             }
 
             var comp = instance.GetComponent<AssetsReference>();
-            return comp ? comp : instance.AddComponent<AssetsReference>().Ref(source, resourceModule);
+            return comp ? comp.Ref(source, resourceModule) : instance.AddComponent<AssetsReference>().Ref(source, resourceModule);
         }
     }
 }
