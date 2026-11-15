@@ -34,6 +34,18 @@ namespace EmberFrameWork.Tests
             ModuleSystem.Update(1, 1); ModuleSystem.Shutdown();
             CollectionAssert.AreEqual(new[] { "tick:high", "tick:low", "stop:low", "stop:high" }, events);
         }
+        [Test] public void ConventionResolutionFindsModuleInInterfaceAssembly()
+        {
+            Assert.AreNotEqual(typeof(ModuleSystem).Assembly, typeof(IAssemblyResolutionProbe).Assembly);
+            var module = (AssemblyResolutionProbe)ModuleSystem.GetModule<IAssemblyResolutionProbe>();
+            Assert.AreSame(module, ModuleSystem.GetModule<IAssemblyResolutionProbe>());
+            Assert.AreEqual(1, module.InitCount);
+            ModuleSystem.Update(0, 0);
+            Assert.AreEqual(1, module.TickCount);
+            ModuleSystem.Shutdown();
+            Assert.AreEqual(1, module.StopCount);
+            Assert.AreNotSame(module, ModuleSystem.GetModule<IAssemblyResolutionProbe>());
+        }
         [Test] public void RegisterPublishesInterfaceAndInitializesImmediately()
         {
             var probe = new Probe();
@@ -60,5 +72,16 @@ namespace EmberFrameWork.Tests
             ModuleSystem.Shutdown();
             Assert.AreEqual(0, MemoryPool.Count);
         }
+    }
+
+    // 接口与实现位于 Editor 程序集，验证 Runtime 中的 ModuleSystem 能按 main 约定定位。
+    public interface IAssemblyResolutionProbe { }
+
+    public sealed class AssemblyResolutionProbe : Module, IAssemblyResolutionProbe, IUpdateModule
+    {
+        public int InitCount, TickCount, StopCount;
+        public override void OnInit() { InitCount++; }
+        public void Update(float elapsed, float real) { TickCount++; }
+        public override void Shutdown() { StopCount++; }
     }
 }
