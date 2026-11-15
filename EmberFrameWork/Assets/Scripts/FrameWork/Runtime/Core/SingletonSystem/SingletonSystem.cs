@@ -214,9 +214,13 @@ namespace EmberFrameWork
         {
             if (_gameObjects != null)
             {
-                foreach (var item in _gameObjects)
+                var gameObjectSnapshot = new List<GameObject>(_gameObjects.Values);
+                foreach (var gameObject in gameObjectSnapshot)
                 {
-                    Object.Destroy(item.Value);
+                    if (gameObject != null)
+                    {
+                        Object.Destroy(gameObject);
+                    }
                 }
 
                 _gameObjects.Clear();
@@ -224,13 +228,23 @@ namespace EmberFrameWork
 
             if (_singletons != null)
             {
-                for (int i = _singletons.Count - 1; i >= 0; i--)
+                var singletonSnapshot = new List<ISingleton>(_singletons);
+                for (int i = singletonSnapshot.Count - 1; i >= 0; i--)
                 {
-                    _singletons[i].Release();
+                    singletonSnapshot[i]?.Release();
                 }
 
                 _singletons.Clear();
             }
+
+            _updates.Clear();
+            _fixedUpdates.Clear();
+            _lateUpdates.Clear();
+#if UNITY_EDITOR
+            _drawGizmos.Clear();
+            _drawGizmosSelecteds.Clear();
+#endif
+            DeInit();
 
             Resources.UnloadUnusedAssets();
         }

@@ -63,13 +63,27 @@ namespace EmberFrameWork.Tests
                 CollectionAssert.AreEqual(new[] { "OtherProbe", "Probe" }, Releases);
                 Assert.IsFalse(Probe.IsValid);
                 Assert.IsFalse(OtherProbe.IsValid);
+
+                int oldUpdates = second.Updates;
+                int oldFixedUpdates = second.FixedUpdates;
+                int oldLateUpdates = second.LateUpdates;
+                var restarted = Probe.Instance;
+                deadline = Time.realtimeSinceStartup + 5f;
+                while (restarted.Updates == 0 || restarted.FixedUpdates == 0 || restarted.LateUpdates == 0)
+                {
+                    Assert.Less(Time.realtimeSinceStartup, deadline, "Singleton callbacks did not reconnect after system release.");
+                    yield return null;
+                }
+                Assert.AreEqual(oldUpdates, second.Updates);
+                Assert.AreEqual(oldFixedUpdates, second.FixedUpdates);
+                Assert.AreEqual(oldLateUpdates, second.LateUpdates);
             }
             finally
             {
                 if (OtherProbe.IsValid) OtherProbe.Instance.Release();
                 if (Probe.IsValid) Probe.Instance.Release();
             }
-            // 原版 Release 保留系统与 UpdateDriver 的连接，本测试不额外重置内部状态。
+            // main 的 Release 解除驱动监听；再次 Retain 时恢复连接。
         }
     }
 }
