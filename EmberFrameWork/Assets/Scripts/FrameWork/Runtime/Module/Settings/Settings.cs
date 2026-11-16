@@ -28,6 +28,9 @@ namespace EmberFrameWork
         [SerializeField]
         private ProcedureSetting procedureSetting;
 
+        [SerializeField] private AudioSetting audioSetting;
+        public static AudioSetting AudioSetting => Instance.audioSetting;
+
         public static ProcedureSetting ProcedureSetting => Instance.procedureSetting;
     }
 }

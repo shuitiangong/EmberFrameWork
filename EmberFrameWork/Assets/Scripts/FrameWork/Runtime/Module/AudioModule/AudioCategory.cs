@@ -1,70 +1,197 @@
-// Adapted from TEngine (Copyright (c) 2022 ALEXTANG, MIT). See ../../Core/LICENSE.txt.
+// Adapted from TEngine main 3ffab9c6 (MIT). See ../../Core/LICENSE.txt.
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Audio;
 
 namespace EmberFrameWork
 {
-    /// <summary>管理一个 Mixer 分类下的播放通道。</summary>
-    internal sealed class AudioCategory
+    /// <summary>
+    /// 音频轨道（类别）。
+    /// </summary>
+    [Serializable]
+    public class AudioCategory
     {
-        private readonly AudioAgent[] _audioAgents;
+        [SerializeField]
+        private AudioMixer audioMixer = null;
 
-        public AudioCategory(AudioMixer mixer, AudioGroupConfig config, Transform parent, IResourceModule resources)
+        public List<AudioAgent> AudioAgents;
+        private readonly AudioMixerGroup _audioMixerGroup;
+        private AudioGroupConfig _audioGroupConfig;
+        private int _maxChannel;
+        private bool _bEnable = true;
+
+        /// <summary>
+        /// 音频混响器。
+        /// </summary>
+        public AudioMixer AudioMixer => audioMixer;
+
+        /// <summary>
+        /// 音频混响器组。
+        /// </summary>
+        public AudioMixerGroup AudioMixerGroup => _audioMixerGroup;
+
+        /// <summary>
+        /// 音频组配置。
+        /// </summary>
+        public AudioGroupConfig AudioGroupConfig => _audioGroupConfig;
+
+        /// <summary>
+        /// 实例化根节点。
+        /// </summary>
+        public Transform InstanceRoot { private set; get; }
+
+        /// <summary>
+        /// 音频轨道是否启用。
+        /// </summary>
+        public bool Enable
         {
-            var groups = mixer.FindMatchingGroups($"Master/{config.AudioType}");
-            var mixerGroup = groups.Length > 0 ? groups[0] : mixer.FindMatchingGroups("Master")[0];
-
-            var root = new GameObject($"Audio Category - {mixerGroup.name}").transform;
-            root.SetParent(parent, false);
-            _audioAgents = new AudioAgent[config.AgentHelperCount];
-
-            for (int index = 0; index < _audioAgents.Length; index++)
+            get => _bEnable;
+            set
             {
-                var host = new GameObject($"Audio Agent Helper - {mixerGroup.name} - {index}");
-                host.transform.SetParent(root, false);
-                var source = host.AddComponent<AudioSource>();
-                source.playOnAwake = false;
-
-                var channel = $"{mixerGroup.name} - {index}";
-                var channelGroups = mixer.FindMatchingGroups($"Master/{mixerGroup.name}/{channel}");
-                source.outputAudioMixerGroup = channelGroups.Length > 0 ? channelGroups[0] : mixerGroup;
-                source.rolloffMode = config.audioRolloffMode;
-                source.minDistance = config.minDistance;
-                source.maxDistance = config.maxDistance;
-
-                _audioAgents[index] = new AudioAgent(source, resources);
+                if (_bEnable != value)
+                {
+                    _bEnable = value;
+                    if (!_bEnable)
+                    {
+                        foreach (var audioAgent in AudioAgents)
+                        {
+                            if (audioAgent != null)
+                            {
+                                audioAgent.Stop();
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        public AudioAgent Play(AudioClip clip, bool loop, float volume)
+        /// <summary>
+        /// 音频轨道构造函数。
+        /// </summary>
+        /// <param name="maxChannel">最大Channel。</param>
+        /// <param name="audioMixer">音频混响器。</param>
+        /// <param name="audioGroupConfig">音频轨道组配置。</param>
+        public AudioCategory(int maxChannel, AudioMixer audioMixer, AudioGroupConfig audioGroupConfig)
         {
-            var selected = _audioAgents[0];
-            foreach (var agent in _audioAgents)
+            var audioModule = ModuleSystem.GetModule<IAudioModule>();
+
+            this.audioMixer = audioMixer;
+            _maxChannel = maxChannel;
+            _audioGroupConfig = audioGroupConfig;
+            AudioMixerGroup[] audioMixerGroups = audioMixer.FindMatchingGroups(Utility.Text.Format("Master/{0}", audioGroupConfig.AudioType.ToString()));
+            if (audioMixerGroups.Length > 0)
             {
-                if (agent.IsFree)
+                _audioMixerGroup = audioMixerGroups[0];
+            }
+            else
+            {
+                _audioMixerGroup = audioMixer.FindMatchingGroups("Master")[0];
+            }
+
+            AudioAgents = new List<AudioAgent>(32);
+            InstanceRoot = new GameObject(Utility.Text.Format("Audio Category - {0}", _audioMixerGroup.name)).transform;
+            InstanceRoot.SetParent(audioModule.InstanceRoot);
+            for (int index = 0; index < _maxChannel; index++)
+            {
+                AudioAgent audioAgent = new AudioAgent();
+                audioAgent.Init(this, index);
+                AudioAgents.Add(audioAgent);
+            }
+        }
+
+        /// <summary>
+        /// 增加音频。
+        /// </summary>
+        /// <param name="num"></param>
+        public void AddAudio(int num)
+        {
+            _maxChannel += num;
+            for (int i = 0; i < num; i++)
+            {
+                AudioAgents.Add(null);
+            }
+        }
+
+        /// <summary>
+        /// 播放音频。
+        /// </summary>
+        /// <param name="path"></param>
+        /// <param name="bAsync"></param>
+        /// <param name="bInPool"></param>
+        /// <returns></returns>
+        public AudioAgent Play(string path, bool bAsync, bool bInPool = false)
+        {
+            if (!_bEnable)
+            {
+                return null;
+            }
+
+            int freeChannel = -1;
+            float duration = -1;
+
+            for (int i = 0; i < AudioAgents.Count; i++)
+            {
+                if (AudioAgents[i] == null || AudioAgents[i].AudioData?.AssetHandle == null || AudioAgents[i].IsFree)
                 {
-                    selected = agent;
+                    freeChannel = i;
                     break;
                 }
-
-                if (agent.Duration > selected.Duration)
-                    selected = agent;
+                else if (AudioAgents[i].Duration > duration)
+                {
+                    duration = AudioAgents[i].Duration;
+                    freeChannel = i;
+                }
             }
 
-            selected.Play(clip, loop, volume);
-            return selected;
+            if (freeChannel >= 0)
+            {
+                if (AudioAgents[freeChannel] == null)
+                {
+                    AudioAgents[freeChannel] = AudioAgent.Create(path, bAsync, this, bInPool);
+                }
+                else
+                {
+                    AudioAgents[freeChannel].Load(path, bAsync, bInPool);
+                }
+
+                return AudioAgents[freeChannel];
+            }
+            else
+            {
+                Log.Error($"Here is no channel to play audio {path}");
+                return null;
+            }
         }
 
+        /// <summary>
+        /// 暂停音频。
+        /// </summary>
+        /// <param name="fadeout">是否渐出</param>
         public void Stop(bool fadeout)
         {
-            foreach (var agent in _audioAgents)
-                agent.Stop(fadeout);
+            for (int i = 0; i < AudioAgents.Count; ++i)
+            {
+                if (AudioAgents[i] != null)
+                {
+                    AudioAgents[i].Stop(fadeout);
+                }
+            }
         }
 
+        /// <summary>
+        /// 音频轨道轮询。
+        /// </summary>
+        /// <param name="elapseSeconds">逻辑流逝时间，以秒为单位。</param>
         public void Update(float elapseSeconds)
         {
-            foreach (var agent in _audioAgents)
-                agent.Update(elapseSeconds);
+            for (int i = 0; i < AudioAgents.Count; ++i)
+            {
+                if (AudioAgents[i] != null)
+                {
+                    AudioAgents[i].Update(elapseSeconds);
+                }
+            }
         }
     }
 }

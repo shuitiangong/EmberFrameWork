@@ -1,144 +1,456 @@
-// Adapted from TEngine (Copyright (c) 2022 ALEXTANG, MIT). See ../../Core/LICENSE.txt.
+// Adapted from TEngine main 3ffab9c6 (MIT). See ../../Core/LICENSE.txt.
 using UnityEngine;
+using UnityEngine.Audio;
+using YooAsset;
 
 namespace EmberFrameWork
 {
-    /// <summary>在一个音频通道上播放并持有当前片段。</summary>
-    public sealed class AudioAgent
+    /// <summary>
+    /// 音频代理辅助器。
+    /// </summary>
+    [System.Serializable]
+    public class AudioAgent
     {
-        private const float FadeoutDuration = 0.2f;
-
-        private readonly AudioSource _source;
-        private readonly IResourceModule _resources;
-        private AudioClip _clip;
-        private PlaybackRequest _pending;
+#if UNITY_6000_1_OR_NEWER
+        private EntityId _instanceId;
+#else
+        private int _instanceId;
+#endif
+        private AudioSource _source;
+        private AudioData _audioData;
+        private IAudioModule _audioModule;
+        private IResourceModule _resourceModule;
+        private Transform _transform;
+        private float _volume = 1.0f;
+        private float _duration;
         private float _fadeoutTimer;
-        private float _volume;
-        private PlaybackState _state;
+        private const float FADEOUT_DURATION = 0.2f;
+        private bool _inPool;
+        private bool _destroyed;
+        private bool _paused;
+        private string _loadPath;
 
-        private enum PlaybackState
+        /// <summary>
+        /// 音频代理辅助器运行时状态。
+        /// </summary>
+        AudioAgentRuntimeState _audioAgentRuntimeState = AudioAgentRuntimeState.None;
+
+        /// <summary>
+        /// 音频代理加载请求。
+        /// </summary>
+        class LoadRequest
         {
-            End,
-            Playing,
-            FadingOut
+            /// <summary>
+            /// 音频代理辅助器加载路径。
+            /// </summary>
+            public string Path;
+
+            /// <summary>
+            /// 是否异步。
+            /// </summary>
+            public bool BAsync;
+
+            /// <summary>
+            /// 是否池化。
+            /// </summary>
+            public bool BInPool;
         }
 
-        private readonly struct PlaybackRequest
-        {
-            public readonly AudioClip Clip;
-            public readonly bool Loop;
-            public readonly float Volume;
+        /// <summary>
+        /// 音频代理加载请求。
+        /// </summary>
+        LoadRequest _pendingLoad = null;
 
-            public PlaybackRequest(AudioClip clip, bool loop, float volume)
+        /// <summary>
+        /// AudioSource实例化Id
+        /// </summary>
+#if UNITY_6000_1_OR_NEWER
+        private EntityId InstanceID => _instanceId;
+#else
+        private int InstanceID => _instanceId;
+#endif
+
+        /// <summary>
+        /// 资源操作句柄。
+        /// </summary>
+        public AudioData AudioData => _audioData;
+
+        /// <summary>
+        /// 音频代理辅助器音频大小。
+        /// </summary>
+        public float Volume
+        {
+            set
             {
-                Clip = clip;
-                Loop = loop;
-                Volume = Mathf.Clamp01(volume);
+                if (_source != null)
+                {
+                    _volume = value;
+                    _source.volume = _volume;
+                }
+            }
+            get => _volume;
+        }
+
+        /// <summary>
+        /// 音频代理辅助器当前是否空闲。
+        /// </summary>
+        public bool IsFree
+        {
+            get
+            {
+                if (_source != null)
+                {
+                    return _audioAgentRuntimeState == AudioAgentRuntimeState.End;
+                }
+                else
+                {
+                    return true;
+                }
             }
         }
 
-        internal AudioAgent(AudioSource source, IResourceModule resources)
+        /// <summary>
+        /// 音频代理辅助器播放秒数。
+        /// </summary>
+        public float Duration => _duration;
+
+        /// <summary>
+        /// 音频代理辅助器当前音频长度。
+        /// </summary>
+        public float Length
         {
-            _source = source;
-            _resources = resources;
-        }
-
-        internal bool IsFree => _state == PlaybackState.End;
-        internal float Duration { get; private set; }
-
-        public AudioSource AudioResource() => _source;
-
-        internal void Play(AudioClip clip, bool loop, float volume)
-        {
-            var request = new PlaybackRequest(clip, loop, volume);
-            if (IsFree)
+            get
             {
-                StartPlayback(request);
-                return;
+                if (_source != null && _source.clip != null)
+                {
+                    return _source.clip.length;
+                }
+
+                return 0;
             }
-
-            ClearPending();
-            _pending = request;
-            BeginFadeOut();
         }
 
-        internal void Stop(bool fadeout)
+        /// <summary>
+        /// 音频代理辅助器实例位置。
+        /// </summary>
+        public Vector3 Position
         {
-            ClearPending();
-            if (fadeout)
-                BeginFadeOut();
-            else if (!IsFree)
-                StopPlayback();
+            get => _transform.position;
+            set => _transform.position = value;
         }
 
-        internal void Update(float elapseSeconds)
+        /// <summary>
+        /// 音频代理辅助器是否循环。
+        /// </summary>
+        public bool IsLoop
         {
-            switch (_state)
+            get
             {
-                case PlaybackState.Playing:
-                    if (!_source.isPlaying)
-                        StopPlayback();
-                    break;
+                if (_source != null)
+                {
+                    return _source.loop;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            set
+            {
+                if (_source != null)
+                {
+                    _source.loop = value;
+                }
+            }
+        }
 
-                case PlaybackState.FadingOut:
-                    _fadeoutTimer -= elapseSeconds;
-                    _source.volume = _volume * Mathf.Clamp01(_fadeoutTimer / FadeoutDuration);
-                    if (_fadeoutTimer <= 0f)
+        /// <summary>
+        /// 音频代理辅助器是否正在播放。
+        /// </summary>
+        internal bool IsPlaying
+        {
+            get
+            {
+                if (_source != null && _source.isPlaying)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 音频代理辅助器获取当前声源。
+        /// </summary>
+        /// <returns></returns>
+        public AudioSource AudioResource()
+        {
+            return _source;
+        }
+
+        /// <summary>
+        /// 创建音频代理辅助器。
+        /// </summary>
+        /// <param name="path">生效路径。</param>
+        /// <param name="bAsync">是否异步。</param>
+        /// <param name="audioCategory">音频轨道（类别）。</param>
+        /// <param name="bInPool">是否池化。</param>
+        /// <returns>音频代理辅助器。</returns>
+        public static AudioAgent Create(string path, bool bAsync, AudioCategory audioCategory, bool bInPool = false)
+        {
+            AudioAgent audioAgent = new AudioAgent();
+            audioAgent.Init(audioCategory);
+            audioAgent.Load(path, bAsync, bInPool);
+            return audioAgent;
+        }
+
+        /// <summary>
+        /// 初始化音频代理辅助器。
+        /// </summary>
+        /// <param name="audioCategory">音频轨道（类别）。</param>
+        /// <param name="index">音频代理辅助器编号。</param>
+        public void Init(AudioCategory audioCategory, int index = 0)
+        {
+            _audioModule = ModuleSystem.GetModule<IAudioModule>();
+            _resourceModule = ModuleSystem.GetModule<IResourceModule>();
+            GameObject host = new GameObject(Utility.Text.Format("Audio Agent Helper - {0} - {1}", audioCategory.AudioMixerGroup.name, index));
+            host.transform.SetParent(audioCategory.InstanceRoot);
+            host.transform.localPosition = Vector3.zero;
+            _transform = host.transform;
+            _source = host.AddComponent<AudioSource>();
+            _source.playOnAwake = false;
+            AudioMixerGroup[] audioMixerGroups =
+                audioCategory.AudioMixer.FindMatchingGroups(Utility.Text.Format("Master/{0}/{1}", audioCategory.AudioMixerGroup.name,
+                    $"{audioCategory.AudioMixerGroup.name} - {index}"));
+            _source.outputAudioMixerGroup = audioMixerGroups.Length > 0 ? audioMixerGroups[0] : audioCategory.AudioMixerGroup;
+            _source.rolloffMode = audioCategory.AudioGroupConfig.audioRolloffMode;
+            _source.minDistance = audioCategory.AudioGroupConfig.minDistance;
+            _source.maxDistance = audioCategory.AudioGroupConfig.maxDistance;
+#if UNITY_6000_1_OR_NEWER
+            _instanceId = _source.GetEntityId();
+#else
+            _instanceId = _source.GetInstanceID();
+#endif
+        }
+
+        /// <summary>
+        /// 加载音频代理辅助器。
+        /// </summary>
+        /// <param name="path">资源路径。</param>
+        /// <param name="bAsync">是否异步。</param>
+        /// <param name="bInPool">是否池化。</param>
+        public void Load(string path, bool bAsync, bool bInPool = false)
+        {
+            if (_audioAgentRuntimeState == AudioAgentRuntimeState.None || _audioAgentRuntimeState == AudioAgentRuntimeState.End)
+            {
+                _inPool = bInPool;
+                _loadPath = path;
+                _paused = false;
+                _duration = 0;
+                if (!string.IsNullOrEmpty(path))
+                {
+                    if (bInPool && _audioModule.AudioClipPool.TryGetValue(path, out var operationHandle))
                     {
-                        StopPlayback();
-                        var pending = _pending;
-                        _pending = default;
-                        if (pending.Clip != null)
-                            StartPlayback(pending);
+                        OnAssetLoadComplete(operationHandle);
                         return;
                     }
-                    break;
+
+                    if (bAsync)
+                    {
+                        _audioAgentRuntimeState = AudioAgentRuntimeState.Loading;
+                        AssetHandle handle = _resourceModule.LoadAssetAsyncHandle<AudioClip>(path);
+                        handle.Completed += OnAssetLoadComplete;
+                    }
+                    else
+                    {
+                        AssetHandle handle = _resourceModule.LoadAssetSyncHandle<AudioClip>(path);
+                        OnAssetLoadComplete(handle);
+                    }
+                }
             }
+            else
+            {
+                _pendingLoad = new LoadRequest { Path = path, BAsync = bAsync, BInPool = bInPool };
 
-            if (!IsFree)
-                Duration += elapseSeconds;
+                if (_audioAgentRuntimeState == AudioAgentRuntimeState.Playing)
+                {
+                    Stop(true);
+                }
+            }
         }
 
-        private void StartPlayback(PlaybackRequest request)
+        /// <summary>
+        /// 停止播放音频代理辅助器。
+        /// </summary>
+        /// <param name="fadeout">是否渐出。</param>
+        public void Stop(bool fadeout = false)
         {
-            _clip = request.Clip;
-            _volume = request.Volume;
-            Duration = 0f;
-            _source.clip = _clip;
-            _source.loop = request.Loop;
-            _source.volume = _volume;
-            _source.Play();
-            _state = PlaybackState.Playing;
+            _paused = false;
+            if (_source != null)
+            {
+                if (fadeout)
+                {
+                    _fadeoutTimer = FADEOUT_DURATION;
+                    _audioAgentRuntimeState = AudioAgentRuntimeState.FadingOut;
+                }
+                else
+                {
+                    _source.Stop();
+                    _audioAgentRuntimeState = AudioAgentRuntimeState.End;
+                }
+            }
         }
 
-        private void BeginFadeOut()
-        {
-            if (_state != PlaybackState.Playing)
-                return;
-
-            _fadeoutTimer = FadeoutDuration;
-            _state = PlaybackState.FadingOut;
-        }
-
-        private void StopPlayback()
+        /// <summary>
+        /// 暂停音频代理辅助器。
+        /// </summary>
+        public void Pause()
         {
             if (_source != null)
             {
-                _source.Stop();
-                _source.clip = null;
+                _paused = true;
+                _source.Pause();
             }
-
-            _state = PlaybackState.End;
-            _resources.UnloadAsset(_clip);
-            _clip = null;
         }
 
-        private void ClearPending()
+        /// <summary>
+        /// 取消暂停音频代理辅助器。
+        /// </summary>
+        public void UnPause()
         {
-            if (_pending.Clip != null)
-                _resources.UnloadAsset(_pending.Clip);
+            if (_source != null)
+            {
+                _paused = false;
+                _source.UnPause();
+            }
+        }
 
-            _pending = default;
+        /// <summary>
+        /// 资源加载完成。
+        /// </summary>
+        /// <param name="handle">资源操作句柄。</param>
+        void OnAssetLoadComplete(AssetHandle handle)
+        {
+            if (_destroyed)
+            {
+                if (handle is { IsValid: true } && (!_inPool || !_audioModule.AudioClipPool.ContainsValue(handle))) handle.Release();
+                return;
+            }
+            if (handle != null)
+            {
+                if (_inPool)
+                {
+                    if (!_audioModule.AudioClipPool.TryAdd(_loadPath, handle) &&
+                        _audioModule.AudioClipPool.TryGetValue(_loadPath, out var cached) && cached != handle)
+                    {
+                        if (handle.IsValid) handle.Release();
+                        handle = cached;
+                    }
+                }
+            }
+
+            if (_pendingLoad != null)
+            {
+                if (!_inPool && handle != null)
+                {
+                    handle.Dispose();
+                }
+
+                _audioAgentRuntimeState = AudioAgentRuntimeState.End;
+                string path = _pendingLoad.Path;
+                bool bAsync = _pendingLoad.BAsync;
+                bool bInPool = _pendingLoad.BInPool;
+                _pendingLoad = null;
+                Load(path, bAsync, bInPool);
+            }
+            else if (handle != null)
+            {
+                if (_audioData != null)
+                {
+                    AudioData.DeAlloc(_audioData);
+                    _audioData = null;
+                }
+
+                _audioData = AudioData.Alloc(handle, _inPool);
+
+                _source.clip = handle.AssetObject as AudioClip;
+                if (_source.clip != null)
+                {
+                    _source.Play();
+                    _audioAgentRuntimeState = AudioAgentRuntimeState.Playing;
+                }
+                else
+                {
+                    _audioAgentRuntimeState = AudioAgentRuntimeState.End;
+                }
+            }
+            else
+            {
+                _audioAgentRuntimeState = AudioAgentRuntimeState.End;
+            }
+        }
+
+        /// <summary>
+        /// 轮询音频代理辅助器。
+        /// </summary>
+        /// <param name="elapseSeconds">逻辑流逝时间，以秒为单位。</param>
+        public void Update(float elapseSeconds)
+        {
+            if (_destroyed || _paused) return;
+            if (_audioAgentRuntimeState == AudioAgentRuntimeState.Playing)
+            {
+                if (!_source.isPlaying)
+                {
+                    _audioAgentRuntimeState = AudioAgentRuntimeState.End;
+                }
+            }
+            else if (_audioAgentRuntimeState == AudioAgentRuntimeState.FadingOut)
+            {
+                if (_fadeoutTimer > 0f)
+                {
+                    _fadeoutTimer -= elapseSeconds;
+                    _source.volume = _volume * _fadeoutTimer / FADEOUT_DURATION;
+                }
+                else
+                {
+                    Stop();
+                    if (_pendingLoad != null)
+                    {
+                        string path = _pendingLoad.Path;
+                        bool bAsync = _pendingLoad.BAsync;
+                        bool bInPool = _pendingLoad.BInPool;
+                        _pendingLoad = null;
+                        Load(path, bAsync, bInPool);
+                    }
+
+                    _source.volume = _volume;
+                }
+            }
+
+            _duration += elapseSeconds;
+        }
+
+        /// <summary>
+        /// 销毁音频代理辅助器。
+        /// </summary>
+        public void Destroy()
+        {
+            if (_destroyed) return;
+            _destroyed = true;
+            _pendingLoad = null;
+            if (_transform != null)
+            {
+                Object.Destroy(_transform.gameObject);
+            }
+
+            if (_audioData != null)
+            {
+                AudioData.DeAlloc(_audioData);
+                _audioData = null;
+            }
         }
     }
 }

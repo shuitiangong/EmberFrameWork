@@ -1,13 +1,35 @@
-// Selected from TEngine (Copyright (c) 2022 ALEXTANG, MIT). See ../../Core/LICENSE.txt.
+// Adapted from TEngine main 3ffab9c6 (MIT). See ../../Core/LICENSE.txt.
 namespace EmberFrameWork
 {
-    /// <summary>音频分类，名称与 AudioMixer 的分组对应。</summary>
+    /// <summary>
+    /// 音效分类，可分别关闭/开启对应分类音效。
+    /// </summary>
+    /// <remarks>命名与AudioMixer中分类名保持一致。</remarks>
     public enum AudioType
     {
+        /// <summary>
+        /// 声音音效。
+        /// </summary>
         Sound,
+
+        /// <summary>
+        /// UI声效。
+        /// </summary>
         UISound,
+
+        /// <summary>
+        /// 背景音乐音效。
+        /// </summary>
         Music,
+
+        /// <summary>
+        /// 人声音效。
+        /// </summary>
         Voice,
+
+        /// <summary>
+        /// 最大。
+        /// </summary>
         Max
     }
 }

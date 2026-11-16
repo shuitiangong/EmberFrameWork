@@ -2,7 +2,20 @@
 
 本文件统一记录项目后续工作。新任务追加到对应分类，执行前核对范围与依赖，完成后更新状态和验证结果。勾选表示已完成；未勾选表示待执行，不代表已授权立即实施。
 
-最后更新：2026-11-15。
+最后更新：2026-11-16。
+
+## 音频与场景 main 同步（2026-11-16）
+
+基线继续使用本地 TEngine main `3ffab9c6`，保留当前 Unity 2022 与 YooAsset 3.0.7 依赖。
+
+- 音频：恢复 main 的分类音量与开关、同步／异步播放、预加载池、暂停恢复、代理复用及 Restart 接口；迁入实际依赖 AudioData、AudioAgentRuntimeState 和 MemoryPoolExtension。Settings 增加 AudioSetting 引用，GameEntry.prefab 绑定已有配置资产；配置显式保留各分类音量为 1。
+- 场景：恢复主场景及叠加场景管理、进度回调、激活、挂起恢复、查询及卸载接口。YooAsset 3 适配集中在明确包引用、`allowSceneActivation = !suspendLoad`、`AllowSceneActivation` 和 `UnloadSceneAsync`。
+- 生命周期适配：音频退出销毁代理和自有节点；销毁后的异步回调释放未托管句柄；预加载池拒绝关闭／清理后到达的旧结果并释放竞争句柄。音频重启清理旧分类节点，扩充声道后的空代理可正常创建。
+- 场景错误处理：保留 main 的状态字段与操作结构；回调入口复用异步入口，避免重复卸载。失败时清理占用标记和失败句柄，成功后才更新有效场景记录，检查当前 UniTask 适配器不会自动抛出的 YooAsset 失败状态。关闭时恢复挂起的场景加载，资源系统最终销毁仍由资源模块负责。
+- 验证：使用安装的 Unity 2022 引用程序集和当前项目缓存依赖，完成 Runtime 的 Editor／Player 条件编译；仅出现 Inspector 序列化字段未显式赋值警告。通过 Unity 自带 Mono 执行 3 项离线回归测试：加载失败后重试、关闭后拒绝加载、音频数据重复清理。
+- Editor 验证（连接恢复后）：3 项 AudioSceneMigrationTests 全部通过；在实际 Launch 会话执行 AudioSceneRuntimeVerification 的音频及场景验证入口，覆盖音频暂停恢复、渐出、分类音量、异步加载、重复预加载、池化复用、Restart，以及 Additive 加载、场景激活、挂起恢复、异步卸载和回调加载／卸载。
+- 运行验证发现并修复两项问题：暂停状态独立于播放结束状态，避免暂停声道被复用；音频池键使用调用方定位路径，适配本项目 AddressDisable 收集规则。池内重复句柄会释放，避免相同路径竞争造成句柄泄漏。
+- 退出检查通过：YooAsset 已销毁，音频根节点残留为 0，Unity 无编译错误；临时验证场景已删除，Editor 恢复 Launch 场景并退出播放。验证通过不包含真机、离线包及 Unity 6 条件分支。
 
 ## 资源模块 main 同步（2026-11-15）
 

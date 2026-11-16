@@ -13,22 +13,34 @@ MonoBehaviour:
   m_Name: AudioSetting
   m_EditorClassIdentifier:
   audioGroupConfigs:
-  - agentHelperCount: 1
+  - name: ""
+    mute: 0
+    volume: 1
+    agentHelperCount: 1
     AudioType: 2
     audioRolloffMode: 1
     minDistance: 15
     maxDistance: 50
-  - agentHelperCount: 4
+  - name: ""
+    mute: 0
+    volume: 1
+    agentHelperCount: 4
     AudioType: 0
     audioRolloffMode: 0
     minDistance: 1
     maxDistance: 500
-  - agentHelperCount: 4
+  - name: ""
+    mute: 0
+    volume: 1
+    agentHelperCount: 4
     AudioType: 1
     audioRolloffMode: 0
     minDistance: 1
     maxDistance: 500
-  - agentHelperCount: 1
+  - name: ""
+    mute: 0
+    volume: 1
+    agentHelperCount: 1
     AudioType: 3
     audioRolloffMode: 0
     minDistance: 1
