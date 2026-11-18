@@ -25,6 +25,14 @@
       },
       "url": "https://package.openupm.com"
     },
+    "com.kybernetik.animancer": {
+      "version": "file:com.kybernetik.animancer",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.modules.animation": "1.0.0"
+      }
+    },
     "com.tuyoogame.yooasset": {
       "version": "3.0.7",
       "depth": 0,
